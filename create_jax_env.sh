@@ -20,7 +20,7 @@ conda install -c conda-forge numpy scipy ipykernel -y
 python3 -Xfrozen_modules=off -m ipykernel \
         install --user --name jax-env --display-name JAX-env
 #
-conda install -c conda-forge numba healpy -y
+conda install -c conda-forge numba healpy camb -y
 #
 python3 -m pip install --upgrade "jax[cuda12_pip]" -f https://storage.googleapis.com/jax-releases/jax_cuda_releases.html
 #
