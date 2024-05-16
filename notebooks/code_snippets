@@ -1,0 +1,56 @@
+from scipy.constants import speed_of_light as speed_light
+from astropy.cosmology import Planck18 as cosmo
+import astropy.cosmology.units as cu
+
+
+C_SPEED_LIGHT_KMS = speed_light/1000. # [km/s]
+h = 0.6777
+zeff = 2.4
+delta_log10_lambda = cosmo.comoving_distance(np.array([zeff])).value[0] /(1.+zeff) * 1./(C_SPEED_LIGHT_KMS * np.log(10.)) * (L*h)/N
+
+print(cosmo.comoving_distance(np.array([zeff])).value[0])
+print(C_SPEED_LIGHT_KMS)
+print(L)
+print(N)
+print(delta_log10_lambda)
+
+def compute_FFT_skewer(delta, delta_lambda_or_log_lambda=delta_log10_lambda,linear_binning=False):
+    """Compute the FFT of delta skewer
+
+    Arguments
+    ---------
+    delta_lambda_or_log_lambda: float
+    Variation of (the logarithm of) the wavelength between two pixels
+
+    delta: array of float
+    Mean transmission fluctuation (delta field)
+
+    linear_binning: bool
+    If set then inputs need to be in AA, outputs will be 1/AA else inputs will
+    be in log(AA) and outputs in s/km
+
+    Return
+    ------
+    k: array of float
+    The Fourier modes the Power Spectrum is measured on
+
+    delta_k: array of float
+    delta field as func of k
+    """
+    num_pixels = delta.shape[1]
+    
+    if linear_binning:  # spectral length in AA
+        length_lambda = delta_lambda_or_log_lambda * num_pixels
+    else:  # spectral length in km/s
+        length_lambda = (delta_lambda_or_log_lambda * C_SPEED_LIGHT_KMS *
+                         np.log(10.) * num_pixels)
+
+    # make 1D FFT
+    fft_delta = np.fft.fft(delta)
+
+    # compute power spectrum
+    #pk = (fft_delta.real**2 + fft_delta.imag**2) * length_lambda / num_pixels**2
+    # k = 2 * np.pi * np.fft.fftfreq(num_pixels, length_lambda / num_pixels)
+    k = 2 * np.pi * np.fft.fftfreq(num_pixels, 1. / num_pixels) / L
+
+    return k, fft_delta.real, fft_delta.imag

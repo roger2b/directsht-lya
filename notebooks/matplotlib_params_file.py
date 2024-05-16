@@ -3,13 +3,13 @@ import matplotlib.pyplot as plt
 from matplotlib.pyplot import rc
 import matplotlib.font_manager
 
-rc('font',**{'size':'22','family':'serif','serif':['CMU serif']})
-rc('mathtext', **{'fontset':'cm'})
-rc('text', usetex=True)
+rc('font',**{'size':'22'})
+# rc('mathtext', **{'fontset':'cm'})
+# rc('text', usetex=True)
 rc('legend',**{'fontsize':'18'})
 
 plt.rcParams['text.usetex'] = False
-plt.rcParams['font.family'] = 'serif'
+# plt.rcParams['font.family'] = 'serif'
 plt.rcParams['axes.linewidth'] = 1.5
 plt.rcParams['xtick.labelsize'] = '18'
 plt.rcParams['xtick.major.size'] = 5
