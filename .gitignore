@@ -19,3 +19,5 @@ ipython_config.py
 # folder with plots 
 notebooks/plots
 notebooks/__pycache__
+__MACOSX/
+fast_Wigner3j/
