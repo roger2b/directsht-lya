@@ -2,6 +2,58 @@ from scipy.constants import speed_of_light as speed_light
 from astropy.cosmology import Planck18 as cosmo
 import astropy.cosmology.units as cu
 
+# # simple sin test case 
+# N_sin=1000
+# sin_grid = np.linspace(0, 10*np.pi, N_sin)
+# sin_vals = np.sin(sin_grid)
+# dx=np.diff(sin_grid)[0]
+# k_arr = np.fft.fftfreq(N_sin, d=dx)
+# FT_mat = np.exp(-2.*np.pi*1j * np.outer(sin_grid, k_arr))
+# FT_sin = np.dot(sin_vals, FT_mat)
+# fft_sin = np.fft.fft(sin_vals)
+# DFT_mat = dft(len(sin_grid))
+# DFT_sin = np.dot(sin_vals, DFT_mat)
+
+# plt.figure(figsize=(7,4))
+# plt.plot(k_arr, fft_sin, label='np.fft.fft')
+# plt.plot(k_arr, FT_sin,ls='--', label='my FT')
+# plt.plot(k_arr, DFT_sin,ls=':', label='DFT')
+# plt.xlim(0.0, 0.5)
+# plt.axvline(1/(2*np.pi), c='k')
+# plt.legend();plt.show()
+
+def compute_dft(chi_grid, mask, delta):
+    """
+    Compute the Discrete Fourier Transform
+
+    Parameters:
+    chi_grid (np.array): Input array representing the chi grid.
+    mask (np.array): Input array of mask values.
+    delta (np.array): Input array of delta values for the Lya forest.
+
+    Returns:
+    tuple: The DFT results of mask and delta.
+    """
+    # Ensure that chi_grid has a uniform step size
+    diffs = np.diff(chi_grid)
+    dx = diffs[0]
+    assert np.allclose(diffs, dx), "Not all values in np.diff(chi_grid) are identical."
+
+    # Number of points
+    N = len(chi_grid)
+
+    # Define k-array for Fourier transform
+    k_arr = np.fft.fftfreq(N, d=dx)
+
+    # Define the Fourier matrix (Vandermonde matrix)
+    # FT definition using -2*pi
+    FT_mat = np.exp(-2.j * np.pi * np.outer(chi_grid, k_arr))
+
+    # Perform the DFT using matrix multiplication
+    FT_mask = np.dot(mask, FT_mat)
+    FT_delta = np.dot(delta, FT_mat)
+    return k_arr, np.real(FT_mask), np.real(FT_delta)
+#k_arr, FT_mask, FT_delta = compute_dft(chi_grid, all_w_rand, all_w_gal)
 
 C_SPEED_LIGHT_KMS = speed_light/1000. # [km/s]
 h = 0.6777

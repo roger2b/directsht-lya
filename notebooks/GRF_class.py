@@ -127,8 +127,51 @@ class PowerSpectrumGenerator:
         pix    = (float(self.L)/float(self.N))**d
         dens   = np.fft.ifftn(self.amplitudes) * boxvol ** (1./2.) / pix
         return np.real(dens)
-
-
+    
+    def process_skewers(self, Nskew, shift = 5e+3):
+        """
+        Process skewers for a 3D grid and compute related fields.
+    
+        Parameters:
+        N (int): The number of points along each axis of the 3D grid.
+        L (float): The length of the side of the 3D box.
+        dens (np.array): The density field of the 3D grid.
+        shift (float): The displacement value for the z-coordinates.
+    
+        Returns:
+        tuple: Processed coordinates (all_x, all_y, all_z), all_w_rand, all_w_gal, and all_hpx.
+        """
+        # Generate 3D meshgrid coordinates
+        coords = np.meshgrid(*[np.linspace(0, self.L, self.N) for _ in range(3)])
+    
+        # Generate skewers
+        np.random.seed(100)
+        inds = np.unique(np.random.randint(0, self.N, size=(Nskew, 2)), axis=0)
+        Nskew = len(inds)
+        print("N_skew = %d / %d" % (Nskew, self.N**2))
+    
+        # Compute density skewers and add 1
+        dens_lya = self.dens[inds[:,0], inds[:,1], :] 
+        skewer_field = dens_lya + 1.
+    
+        # Displace the box in the z-direction
+        print("Displacing box by %.3e" % shift)
+        tmp_all_x = coords[0][inds[:,0], inds[:,1], :]  # + shift
+        tmp_all_y = coords[1][inds[:,0], inds[:,1], :]  # + shift
+        tmp_all_z = coords[2][inds[:,0], inds[:,1], :] + shift
+    
+        # Swap coordinates
+        all_x = tmp_all_z.copy()
+        all_y = tmp_all_y.copy()
+        all_z = tmp_all_x.copy()
+    
+        # Define mask (in draft: K_j(chi))
+        all_w_rand = np.ones_like(all_x, dtype='float')
+        
+        # Define delta (in draft: delta_F(chi))
+        all_w_gal = np.asarray(skewer_field, dtype='float')
+    
+        return all_x, all_y, all_z, all_w_rand, all_w_gal, Nskew
 
 @jit(nopython=True)
 def compute_mu3d(L,n, kfft):
