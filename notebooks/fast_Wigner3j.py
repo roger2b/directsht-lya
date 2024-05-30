@@ -57,7 +57,7 @@ class CoupleMat:
     def __init__(self, 
                  Nl, 
                  wl,
-                 verbose=True):
+                 verbose=False):
         
         self.Nl   = Nl
         self.lmax = Nl-1
