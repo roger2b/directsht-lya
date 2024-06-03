@@ -34,21 +34,18 @@ class MaskDeconvolution:
         pad       = max(0,2*Nl-1-W_l.size)
         self.W_l  = np.pad(W_l,(0,pad),'constant',constant_values=0)
         # 
-        # Precompute the expensive stuff
-        if verbose:
-            print("Precomputing Wigner 3j symbols...")
         ################### Changes rmvd2 05162024
         if precomputed_Wigner is None:
+            # Precompute the expensive stuff
+            if verbose: print("Precomputing Wigner 3j symbols...")
             # Precompute the required Wigner 3js
             self.w3j000 = Wigner3j(2*Nl-1)
             #
-            if verbose:
-                print("Computing the mode-coupling matrix...")
+            if verbose: print("Computing the mode-coupling matrix...")
             # Compute the mode-coupling matrix
             self.Mll = self.get_M()
         else:
-            if verbose:
-                print('read in Wigner 3j matrix')
+            if verbose: print('read in Wigner 3j matrix')
             self.Mll = precomputed_Wigner
         #################### Changes rmvd2 05162024
         ##################

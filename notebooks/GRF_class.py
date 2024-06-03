@@ -173,6 +173,20 @@ class PowerSpectrumGenerator:
     
         return all_x, all_y, all_z, all_w_rand, all_w_gal, Nskew
 
+    def compute_theta_phi_skewer_start(self, x,y,z):
+        # only compute the Theta, Phi angle for the *first* pixel of the Lya skewer
+
+        xsq = x ** 2.
+        ysq = y ** 2.
+
+        s = (xsq + ysq) ** 0.5
+
+        # convert to degrees
+        phi = np.arctan2(y, x)
+        theta = np.arctan2(s, z)
+    
+        return theta, phi
+
 @jit(nopython=True)
 def compute_mu3d(L,n, kfft):
     print('compute mu = k_los / |k|')
