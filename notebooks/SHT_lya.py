@@ -47,7 +47,7 @@ def compute_nhat(tdata, pdata):
     nhat = np.column_stack((sin_tdata * cos_pdata, sin_tdata * sin_pdata, cos_tdata))
     return nhat
 
-@njit(parallel=True)
+@njit(parallel=True, fastmath=True)
 def legendre_polynomials_sum(n, x, kk):
     """
     Compute the Legendre polynomials up to the nth order at points x and return their sums.
@@ -59,6 +59,8 @@ def legendre_polynomials_sum(n, x, kk):
 
     Returns:
     ndarray: An array where each entry is the sum of the Legendre polynomial of the corresponding order.
+
+    To Do: use symmetry of x to reduce computation time
     """
     x = np.asarray(x)
     P_sum = np.zeros(n + 1)
