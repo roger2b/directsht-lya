@@ -3,6 +3,8 @@ import scipy.linalg as spl
 from scipy.special import eval_legendre
 from numba import njit
 
+#################### FFT functions ####################
+
 def compute_dft(chi_grid, mask, delta):
     # Discrete FT of data
     # Ensure that chi_grid has a uniform step size
@@ -22,7 +24,7 @@ def compute_dft(chi_grid, mask, delta):
     FT_delta = np.dot(delta, FT_mat)
     return k_arr, np.real(FT_mask), np.real(FT_delta)
 
-
+#################### theory module functions ####################
 
 def compute_nhat(tdata, pdata):
     """
@@ -44,8 +46,6 @@ def compute_nhat(tdata, pdata):
     # Compute nhat
     nhat = np.column_stack((sin_tdata * cos_pdata, sin_tdata * sin_pdata, cos_tdata))
     return nhat
-
-
 
 @njit(parallel=True)
 def legendre_polynomials_sum(n, x, kk):
@@ -83,7 +83,6 @@ def legendre_polynomials_sum(n, x, kk):
     
     return P_sum
 
-
 def compute_PLKjKk(lambda_idx,cos_theta_njnk, KjKk):
     """
     Compute PLKjKk given input data.
@@ -113,3 +112,18 @@ def compute_PLKjKk(lambda_idx,cos_theta_njnk, KjKk):
 def compute_PLKjKk_parallel(args):
     lambda_idx, cos_theta_njnk, KjKk = args
     return compute_PLKjKk(lambda_idx, cos_theta_njnk, KjKk)
+
+def F_ell_L_lambda(ell, L, lambda_):
+    # Compute the prefactor
+    prefactor = (2.*L + 1.) * (2.*lambda_ + 1.) / (4. * np.pi)**2
+    # Compute the Wigner 3-j symbol
+    wigner_3j_value = MD.w3j000(ell, L, lambda_)**2
+    return prefactor * wigner_3j_value
+
+def compute_Wigner3j_symmetry_range(j1, j2):
+    """
+    Compute the range for j3 given j1 and j2: 
+    |j1 - j2| <= j3 <= j1 + j2
+    """
+    return abs(j1 - j2), abs(j1 + j2)
+############### theory functions ####################
