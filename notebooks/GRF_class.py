@@ -18,7 +18,11 @@ class PowerSpectrumGenerator:
                  bins=30,
                  add_rsd=True,
                  my_bias=1.,
-                 my_beta=1.5):
+                 my_beta=1.5, 
+                 seed=1000,
+                 verbose=False):
+    
+        self.verbose = verbose
         # define cosmology
         self.h = h
         self.Omega_b = Omega_b
@@ -36,23 +40,24 @@ class PowerSpectrumGenerator:
         self.L = L
         self.bins = bins
         self.k_f = 2 * np.pi / L
-        print('Fundamental mode k_f=', self.k_f)
+        if self.verbose: print('Fundamental mode k_f=', self.k_f)
 
         self.kfft = np.fft.fftfreq(N) * 2.0 * np.pi / self.L * self.N
         self.kminfft = np.amin(np.abs(self.kfft))
         self.kmaxfft = np.amax(np.abs(self.kfft))
         self.kmax = np.sqrt(3) * self.kmaxfft
-        print('max mode k_f=', self.kmax)
+        if self.verbose: print('max mode k_f=', self.kmax)
         
         self.kmin = self.kminfft
         self.kNy = self.kmaxfft
-        print('Nyquist frequency:', self.kNy)
+        if self.verbose: print('Nyquist frequency:', self.kNy)
         
         self.k_bins = np.geomspace(1.e-4, self.kmax, bins + 1)
         self.k_bin_ctrs = (self.k_bins[1:] + self.k_bins[:-1]) / 2.0
         
-        print('ratio of Nyquist to fundamental freq', self.kNy / self.k_f)
-        print('ratio of max to Nyquist freq', self.kmax / self.kNy)
+        if self.verbose: 
+            print('ratio of Nyquist to fundamental freq', self.kNy / self.k_f)
+            print('ratio of max to Nyquist freq', self.kmax / self.kNy)
 
         # RSD
         self.add_rsd = add_rsd
@@ -62,26 +67,29 @@ class PowerSpectrumGenerator:
             self.my_beta = my_beta
         else: 
             self.my_beta = 0.
-        print('beta', self.my_beta)
-        print('bias', self.my_bias)
-        print('RSD:', self.add_rsd)
-        
-        print('get power spectrum from CAMB')
+        self.seed = seed
+        if self.verbose: 
+            print('beta', self.my_beta)
+            print('bias', self.my_bias)
+            print('RSD:', self.add_rsd)
+            print('seed:', self.seed)
+            
+        if self.verbose: print('get power spectrum from CAMB')
         self.kh_lin, self.z_lin, self.pk_lin = self.get_linear_matter_power_spectrum()
 
         self.plin = interp1d(self.kh_lin, self.pk_lin[0,:], fill_value="extrapolate")
-        print('define k grid')
+        if self.verbose: print('define k grid')
         all_ks_3d = get_ks3d(self.L, self.N, self.kfft)
 
         self.pk_all = self.plin(all_ks_3d)
-        print('compute amplitudes')
+        if self.verbose: print('compute amplitudes')
         self.amplitudes = self.compute_amplitudes3d()
 
         self.amplitudes_squared = np.real(self.amplitudes*np.conj(self.amplitudes))
         self.dens = self.density_field()
 
     def compute_power_spectrum(self):
-        print('compute power spectrum')
+        if self.verbose: print('compute power spectrum')
         k_eff, Pk, Pk2, Pk4, counts, totcounts = compute_Pk(self.N, self.amplitudes_squared, self.bins, self.k_bins, self.kfft)
         return k_eff, Pk, Pk2, Pk4, counts, totcounts
 
@@ -108,12 +116,13 @@ class PowerSpectrumGenerator:
         plt.show()
 
     def compute_amplitudes3d(self):
-        print('Include anisotropies', self.add_rsd)
+        if self.verbose: print('Include anisotropies', self.add_rsd)
         # if aniso:
         mu = compute_mu3d(self.L, self.N, self.kfft)
-        print('bias', self.my_bias)
-        print('beta', self.my_beta)
-        return self.my_bias * get_amplitudes3d(self.L, self.N, self.pk_all, self.my_beta, mu)
+        if self.verbose: 
+            print('bias', self.my_bias)
+            print('beta', self.my_beta)
+        return self.my_bias * get_amplitudes3d(self.L, self.N, self.pk_all, self.my_beta, self.seed, mu)
 
     def get_multipoles(self):
         p0 = self.my_bias**2 * (1. + 2. * self.my_beta / 3. + self.my_beta**2. / 5.) * self.pk_lin[0,:]
@@ -122,7 +131,7 @@ class PowerSpectrumGenerator:
         return p0, p2, p4
 
     def density_field(self, d=3):
-        print('Transforming amplitudes to density field')
+        if self.verbose: print('Transforming amplitudes to density field')
         boxvol = float(self.L)**d
         pix    = (float(self.L)/float(self.N))**d
         dens   = np.fft.ifftn(self.amplitudes) * boxvol ** (1./2.) / pix
@@ -145,17 +154,18 @@ class PowerSpectrumGenerator:
         coords = np.meshgrid(*[np.linspace(0, self.L, self.N) for _ in range(3)])
     
         # Generate skewers
+        # always extract the same skewers
         np.random.seed(100)
         inds = np.unique(np.random.randint(0, self.N, size=(Nskew, 2)), axis=0)
         Nskew = len(inds)
-        print("N_skew = %d / %d" % (Nskew, self.N**2))
+        if self.verbose: print("N_skew = %d / %d" % (Nskew, self.N**2))
     
         # Compute density skewers and add 1
         dens_lya = self.dens[inds[:,0], inds[:,1], :] 
         skewer_field = dens_lya + 1.
     
         # Displace the box in the z-direction
-        print("Displacing box by %.3e" % shift)
+        if self.verbose: print("Displacing box by %.3e" % shift)
         tmp_all_x = coords[0][inds[:,0], inds[:,1], :]  # + shift
         tmp_all_y = coords[1][inds[:,0], inds[:,1], :]  # + shift
         tmp_all_z = coords[2][inds[:,0], inds[:,1], :] + shift
@@ -216,7 +226,8 @@ def get_ks3d(L, n, kfft):
     return kk
 
 @jit(nopython=True)
-def get_amplitudes3d(L, n, Pk, beta, mu):
+def get_amplitudes3d(L, n, Pk, beta, seed, mu):
+    np.random.seed(seed)
     areal = np.zeros((n,n,n))
     aim = np.zeros((n,n,n))
     for i in range(n):
