@@ -199,7 +199,7 @@ class PowerSpectrumGenerator:
 
 @jit(nopython=True)
 def compute_mu3d(L,n, kfft):
-    print('compute mu = k_los / |k|')
+    # print('compute mu = k_los / |k|')
     mu  = np.ones((n,n,n))
     for i in range(n):
         for j in range(n):

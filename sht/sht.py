@@ -139,7 +139,7 @@ class DirectSHT:
         return(alms)
         #
     
-    def basic_sht(self, theta, phi, wt, reg_factor=1., verbose=True):
+    def basic_sht(self, theta, phi, wt, reg_factor=1., verbose=False):
         """
         Returns alm for a collection of real-valued points at (theta,phi),
         in radians, with weights wt.

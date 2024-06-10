@@ -12,9 +12,8 @@ _nopython = False
 
 print('_fastmath {}'.format(_fastmath))
 print('_parallel {}'.format(_parallel))
-print('_nopython {}'.format(_nopython))
 
-@jit(nopython=_nopython, parallel=_parallel, fastmath=_fastmath)
+@njit(parallel=_parallel, fastmath=_fastmath)
 def _compute_matrix(lmax, lnjp1, one_jp1, lng, g, one_g, wl, m):
     # Precompute logarithmic values
     for i in range(4 * lmax + 1):
