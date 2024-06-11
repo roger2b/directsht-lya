@@ -165,7 +165,7 @@ class PowerSpectrumGenerator:
         skewer_field = dens_lya + 1.
     
         # Displace the box in the z-direction
-        if self.verbose: print("Displacing box by %.3e" % shift)
+        print("Displacing box by %.3e" % shift)
         tmp_all_x = coords[0][inds[:,0], inds[:,1], :]  # + shift
         tmp_all_y = coords[1][inds[:,0], inds[:,1], :]  # + shift
         tmp_all_z = coords[2][inds[:,0], inds[:,1], :] + shift

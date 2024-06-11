@@ -1,4 +1,4 @@
-import os, sys
+import os
 import numpy as np
 from matplotlib_params_file import *
 import multiprocessing as mp
@@ -10,6 +10,8 @@ import GRF_class as my_GRF
 # import function for SHT-lya
 import SHT_lya as sht_lya
 
+import sys
+#
 #sys.path.insert(0, '/global/homes/r/rmvd2/lya_Cl/directsht-lya/')
 sys.path.insert(0, '/Users/rdb/Desktop/research/lya/P3D_Cell/directsht-lya/')
 from sht.sht                import DirectSHT
@@ -21,104 +23,82 @@ try:
 except:
     print("No GPU found")
 
-do_plots=False
+# Wigner3j code
+import fast_Wigner3j as Wigner3j
+
 
 # define GRF settings
 
 # define number of qso drawn from the box
 num_qso = int(1e+4)
-num_sim = 20
 
 # set `add_rsd=True' if you want to add RSD
 add_rsd_=False
 
-#initialize SHT
+my_seed = 100
+GRF = my_GRF.PowerSpectrumGenerator(add_rsd=add_rsd_, seed=my_seed)
+
+all_x, all_y, all_z, all_w_rand, all_w_gal, Nskew = GRF.process_skewers(Nskew=num_qso)
+
+all_theta, all_phi = GRF.compute_theta_phi_skewer_start(all_x[:,0], all_y[:,0], all_z[:,0])
+chi_grid = all_x[0,:] # Mpc/h
+
+k_arr, FT_mask, FT_delta = sht_lya.compute_dft(chi_grid, all_w_rand, all_w_gal)
+
+# %%
 # Set up an sht instance.
 Nl   = 500
 Nx   = 2*Nl
 xmax = 5.0/8.0
 #
 sht= DirectSHT(Nl,Nx,xmax)
-#
-# Here we don't go to higher lmax in W_l since we DO NOT mode-decouple
-buffer_ells = 64
-sht_randoms = DirectSHT(Nl+buffer_ells,Nx,xmax)
-#
+
 print("For general, Direct SHT has Nl=",sht.Nell,", Nx=",Nx," and xmax=",xmax)
-print("For randoms, Direct SHT has Nl=",sht_randoms.Nell,", Nx=",Nx," and xmax=",xmax)
 
-data_dict = {
-    'theory_cl': [],
-    'binned_ells': [],
-    'measured_cl': [],
-    'window_conv_theory_cl': [],
-    'cl_k': [],
-    'wl_k': [],
-    'Nskew': [],
-    'Nk': [],
-    'L': []
-}
+tdata,pdata,wdata = all_theta, all_phi, FT_delta.real
+trand,prand,wrand = all_theta, all_phi, FT_mask.real
+print(f'Nskew = {Nskew}, Nk = {wrand.shape[1]}')
 
-# cl_k = []
-# wl_k = []
-for seed_idx in range(num_sim):
-    GRF = my_GRF.PowerSpectrumGenerator(add_rsd=add_rsd_, seed=seed_idx, verbose=False)
-    all_x, all_y, all_z, all_w_rand, all_w_gal, Nskew = GRF.process_skewers(Nskew=num_qso)
-    all_theta, all_phi = GRF.compute_theta_phi_skewer_start(all_x[:,0], all_y[:,0], all_z[:,0])
-    chi_grid = all_x[0,:]
-
-    k_arr, FT_mask, FT_delta = sht_lya.compute_dft(chi_grid, all_w_rand, all_w_gal)
-
-    tdata,pdata,wdata = all_theta, all_phi, FT_delta
-    trand,prand,wrand = all_theta, all_phi, FT_mask
-    print(f'Nskew = {Nskew}, Nk = {GRF.N}, L = {GRF.L}')
-
-    # define index for calculation 
-    k_idx = 0
-    # To Do: do this in a loop
-
-    # Calculate the angular power spectrum of the randoms for the window function
-    hran_for_wl = sht_randoms(trand,prand,wrand[:,k_idx])
-
-    data_dict['wl_k'].append(hp.alm2cl(hran_for_wl))
-
-    # Calculate the angular power spectrum of the data-randoms
-    hdat = sht(tdata, pdata, wdata[:, k_idx] - wrand[:, k_idx])
-    cl_sht = hp.alm2cl(hdat)
-    data_dict['cl_k'].append(cl_sht)
-
-data_dict['Nskew'] = Nskew
-data_dict['Nk'] = GRF.N
-data_dict['L'] = GRF.L
-data_dict['cl_k'] = np.stack(data_dict['cl_k'])
-data_dict['wl_k'] = np.stack(data_dict['wl_k'])
-
-# np.save(f'./data/cl_k_GRF_L{int(GRF.L):d}_N{int(GRF.N):d}_Nq{int(Nskew):d}_Nl{int(Nl):d}_sims{int(num_sim):d}.npy', cl_k)
-
-# np.save(f'./data/wl_GRF_L{int(GRF.L):d}_N{int(GRF.N):d}_Nq{int(Nskew):d}_Nl{int(Nl):d}_sims{int(num_sim):d}.npy', wl_k)
-
-
-############## compute theory spectra ###########
-# Wigner3j code
-import fast_Wigner3j as Wigner3j
-
-# define which theory to compute 
-print('DANGEROUS: since periodic box, all wl are the same')
+# define index for calculation 
 k_idx = 0
-wl_k = data_dict['wl_k']
-cl_k = data_dict['cl_k']
+
+
+cl_k = []
+wl_k = []
+for _k_idx in np.arange(0, k_idx+1, 1):
+    hdat = sht(tdata,pdata,wdata[:,_k_idx])
+    # Do the same for the randoms.
+    hran = sht(trand,prand,wrand[:,_k_idx])
+    # Anton normalization for FKP-type weights
+    # hran*= hdat[0]/hran[0]
+    # and for the difference of data and randoms:
+    hdif = hp.alm2cl(hdat-hran)
+    wl = hp.alm2cl(hran)
+    cl_k.append(hdif)
+    wl_k.append(wl)
+cl_k = np.stack(cl_k)
+wl_k = np.stack(wl_k)
 
 
 #initialize class
-couple_mat = Wigner3j.CoupleMat(Nl, wl_k[k_idx])
+couple_mat = Wigner3j.CoupleMat(Nl, wl_k[_k_idx])
 coupling_matrix = couple_mat.compute_matrix()
 
-MD = MaskDeconvolution(Nl,wl_k[k_idx],precomputed_Wigner=coupling_matrix)
+MD = MaskDeconvolution(Nl,wl_k[_k_idx],precomputed_Wigner=coupling_matrix)
+
 # choose binning for Cell's
 NperBin = 2**5
 bins    = MD.binning_matrix('linear',0,NperBin)
 Mbl     = MD.window_matrix(bins)
+# # Look at the sums over ell.
+# print("\nRow sums of Mbl:")
+# print(Mbl.sum(axis=1))
 
+print('cross checks ')
+print(np.allclose(coupling_matrix, MD.Mll))
+
+
+#lambda_min, lambda_max = sht_lya.compute_Wigner3j_symmetry_range(Nl, Nl)
 lambda_max = 2*Nl
 L_max = Nl
 
@@ -151,15 +131,17 @@ def Power_spectrum(kh_perp, kh_par, add_rsd=add_rsd_):
     # print(kh, pk)
     return Kaiser_factor * pk
 
+plt.figure(figsize=(5,4));plt.imshow(coupling_matrix/MD.Mll/(4*np.pi));plt.colorbar();plt.show()
+
 # compute F_{ell L lambda} matrix
 couple_mat = Wigner3j.CoupleMat(Nl, PLKjKk)
 coupling_matrix_leg_pol = couple_mat.compute_matrix()
 
-couple_mat = Wigner3j.CoupleMat(Nl, wl_k[k_idx])
+couple_mat = Wigner3j.CoupleMat(Nl, wl_k[_k_idx])
 coupling_matrix_window = couple_mat.compute_matrix()
 
 # is the L range sufficient?
-L_range = np.arange(1, L_max+1, 1)
+L_range = np.arange(0, L_max, 1)
 
 # is chi bar approx correct?
 chi_bar = (chi_grid.max()+chi_grid.min())/2
@@ -182,15 +164,7 @@ binned_C_ell = bins @ C_ell#[:MD.Mll.shape[1]]
 # bin theory window func convolved Cell's
 binned_C_ell_hat = bins @ C_ell_hat
 # bin measured Cell's
-binned_hdif = []
-for i in range(num_sim):
-    binned_hdif.append(bins @ cl_k[i])
-binned_hdif = np.stack(binned_hdif)
+binned_hdif = bins @ cl_k[_k_idx]
 
-data_dict['theory_cl'] = binned_C_ell
-data_dict['window_conv_theory_cl'] = binned_C_ell_hat
-
-data_dict['binned_ells'] = my_binned_ells
-data_dict['measured_cl'] = binned_hdif
-
-np.savez(f'./data/Cell_GRF_L{int(GRF.L):d}_N{int(GRF.N):d}_Nq{int(Nskew):d}_Nl{int(Nl):d}_sims{int(num_sim):d}.npz', **data_dict)
+# %%
+norm_Plambda = PLKjKk[0]
