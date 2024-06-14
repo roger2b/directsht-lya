@@ -56,7 +56,7 @@ def compute_nhat(tdata, pdata):
     nhat = np.column_stack((sin_tdata * cos_pdata, sin_tdata * sin_pdata, cos_tdata))
     return nhat
 
-@njit(parallel=True, fastmath=True)
+@njit(parallel=True)
 def legendre_polynomials_sum(n, x, kk):
     """
     Compute the Legendre polynomials up to the nth order at points x and return their sums.

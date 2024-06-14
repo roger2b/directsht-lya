@@ -22,12 +22,10 @@ except:
 def initialize_sht(Nl, buffer_ells, xmax):
     Nx = 2 * Nl
     sht = DirectSHT(Nl, Nx, xmax)
-    sht_randoms = DirectSHT(Nl + buffer_ells, Nx, xmax)
     print(f"For general, Direct SHT has Nl={sht.Nell}, Nx={Nx}, and xmax={xmax}")
-    print(f"For randoms, Direct SHT has Nl={sht_randoms.Nell}, Nx={Nx}, and xmax={xmax}")
-    return sht, sht_randoms
+    return sht
 
-def process_simulations(GRF, num_qso, sht, sht_randoms):
+def process_simulations(GRF, num_qso, sht):
     all_x, all_y, all_z, all_w_rand, all_w_gal, Nskew = GRF.process_skewers(Nskew=num_qso)
     all_theta, all_phi = GRF.compute_theta_phi_skewer_start(all_x[:,0], all_y[:,0], all_z[:,0])
     chi_grid = all_x[0,:]
@@ -39,8 +37,8 @@ def process_simulations(GRF, num_qso, sht, sht_randoms):
     print(f'Nskew = {Nskew}, Nk = {GRF.N}, L = {GRF.L}')
 
     # Calculate the angular power spectrum of the randoms for the window function
-    hran_for_wl = sht_randoms(trand, prand, wrand[:,0])
-    wl = hp.alm2cl(hran_for_wl)
+    hran = sht(trand, prand, wrand[:,0])
+    wl = hp.alm2cl(hran)
 
     # Calculate the angular power spectrum of the data-randoms
     hdat = sht(tdata, pdata, wdata[:,0] - wrand[:,0])
@@ -58,25 +56,28 @@ def main():
 
     # Define GRF settings
     num_qso = int(1e+4)
-    num_sim = 2
+    num_sim = 3
     add_rsd = False
+    k_max_idx = 1
 
     # Initialize SHT
     Nl = 500
     buffer_ells = 64
     xmax=5.0/8.0
-    sht, sht_randoms = initialize_sht(Nl, buffer_ells=buffer_ells, xmax=xmax)
+    sht = initialize_sht(Nl, buffer_ells=buffer_ells, xmax=xmax)
 
     # Process simulations
     cl_k = []
     wl = []
-    for seed_idx in range(num_sim):
-        GRF = my_GRF.PowerSpectrumGenerator(add_rsd=add_rsd, seed=seed_idx, verbose=False)
-        cl_sht, wl_sht, Nskew = process_simulations(num_sim, num_qso, GRF, sht, sht_randoms)
-        cl_k.append(cl_sht)
-        wl.append(wl_sht)
+    for k_idx in range(k_max_idx):
+        print(f'Processing {num_sim} simulations for k_idx= {k_idx} h/Mpc')
+        for seed_idx in range(num_sim):
+            GRF = my_GRF.PowerSpectrumGenerator(add_rsd=add_rsd, seed=seed_idx, verbose=False)
+            cl_sht, wl_sht, Nskew = process_simulations(num_sim, num_qso, GRF, sht)
+            cl_k.append(cl_sht)
+            wl.append(wl_sht)
     cl_k = np.stack(cl_k)
-    wl = np.stack(wl)
+    wl   = np.stack(wl)
 
     # Save results
     cl_fname = f'./data/cl_k_GRF_L{int(GRF.L):d}_N{int(GRF.N):d}_Nq{int(Nskew):d}_Nl{int(Nl):d}_sims{int(num_sim):d}.npy'
