@@ -1,27 +1,21 @@
-# Copyright (C) 2024 Roger de Belsunce & Steven Gratton 
 import sys
 import math
 import numpy as np 
 import healpy as hp
-from numba import jit, njit, prange
+from numba import njit, prange
 
 @njit(parallel=True)
 def _compute_matrix(lmax, lnjp1, one_jp1, lng, g, one_g, wl, m):
-    # Precompute logarithmic values
-    for i in range(4 * lmax + 1):
+    # Precompute logarithmic and exponential values
+    for i in prange(4 * lmax + 1):
         lnjp1[i] = np.log(i + 1)
         one_jp1[i] = 1.0 / (i + 1)
-
-    # Compute logarithmic values
-    lng[0] = 0.0
-    for i in range(1, 2 * lmax + 1):
+    for i in prange(1, 2 * lmax + 1):
         lng[i] = lng[i - 1] + np.log((i - 0.5) / i)
-
-    # Compute exponential values
-    for i in range(2 * lmax + 1):
+    for i in prange(2 * lmax + 1):
         g[i] = np.exp(lng[i])
         one_g[i] = np.exp(-lng[i])
-
+        
     # Compute the matrix elements
     for i in prange(lmax + 1):
         for j in range(i, lmax + 1):
@@ -32,13 +26,10 @@ def _compute_matrix(lmax, lnjp1, one_jp1, lng, g, one_g, wl, m):
                 tmp += (2.0 * l + 1.0) * wl[l] * g[j_2 - i] * g[j_2 - j] * g[j_2 - l] * one_g[j_2] * one_jp1[j_sum]
             m[i * (lmax + 1) + j] = tmp * 0.25 / math.pi
 
-    # Symmetrize the matrix
-    for i in range(lmax + 1):
+    # Symmetrize and scale the matrix
+    for i in prange(lmax + 1):
         for j in range(i, lmax + 1):
             m[j * (lmax + 1) + i] = m[i * (lmax + 1) + j]
-
-    # Scale the matrix elements
-    for i in range(lmax + 1):
         for j in range(lmax + 1):
             m[i * (lmax + 1) + j] *= (2.0 * j + 1.0)
 
@@ -68,4 +59,3 @@ class CoupleMat:
 
     def compute_matrix(self):
         return _compute_matrix(self.lmax, self.lnjp1, self.one_jp1, self.lng, self.g, self.one_g, self.wl, self.m)
-    

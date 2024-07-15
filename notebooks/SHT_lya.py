@@ -5,18 +5,18 @@ from numba import njit
 
 #################### FFT functions ####################
 
-def compute_dft(chi_grid, mask, delta):
+def compute_dft(chi_grid, mask, delta, apply_inv_length=False):
     # Discrete FT of data
     # Ensure that chi_grid has a uniform step size
-    diffs = np.diff(chi_grid)
-    dx = diffs[0]
-    assert np.allclose(diffs, dx), "Not all values in np.diff(chi_grid) are identical."
-
+    dchi = chi_grid[1] - chi_grid[0]
+    if apply_inv_length:
+        mask  /= dchi
+        delta /= dchi
     # Number of points
     N = len(chi_grid)
 
     # Define k-array for Fourier transform
-    k_arr = np.fft.fftfreq(N, d=dx)
+    k_arr = np.fft.fftfreq(N, d=dchi)
 
     FT_mat = spl.dft(N)
     # Perform the DFT using matrix multiplication

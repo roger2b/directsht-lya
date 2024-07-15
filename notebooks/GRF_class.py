@@ -180,7 +180,7 @@ class PowerSpectrumGenerator:
         
         # Define delta (in draft: delta_F(chi))
         all_w_gal = np.asarray(skewer_field, dtype='float')
-    
+        
         return all_x, all_y, all_z, all_w_rand, all_w_gal, Nskew
 
     def compute_theta_phi_skewer_start(self, x,y,z):

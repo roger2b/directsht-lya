@@ -21,7 +21,8 @@ except ImportError:
     jax_present = False
     move_to_device = lambda x, **kwargs: x  # Dummy definition for fallback
     print("JAX not found. Falling back to NumPy.")
-    from numba import njit as jit
+    from numba import jit
+    #from numba import njit as jit
     import sht.legendre_py as legendre
     import sht.interp_funcs_py as interp
     import sht.utils_py as utils
