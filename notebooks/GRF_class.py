@@ -7,19 +7,20 @@ from scipy.interpolate import interp1d
 
 class PowerSpectrumGenerator:
     def __init__(self, 
-                 h=0.6770, 
-                 Omega_b=0.04904, 
-                 Omega_m=0.3147, 
-                 ns=0.96824, 
-                 As=2.10732e-9, 
+                 h=0.6766, 
+                 Omega_b=0.04897, 
+                 Omega_m=0.3111, 
+                 ns=0.9665, 
+                 As=2.1e-9, 
                  mnu=0.0, 
                  N=512, 
                  L=1380.0, 
                  bins=30,
                  add_rsd=True,
-                 my_bias=1.,
-                 my_beta=1.5, 
+                 my_bias=-0.1521,
+                 my_beta=0.2298, 
                  seed=1000,
+                 z=2.33,
                  verbose=False):
     
         self.verbose = verbose
@@ -68,14 +69,16 @@ class PowerSpectrumGenerator:
         else: 
             self.my_beta = 0.
         self.seed = seed
+        self.z = z
         if self.verbose: 
             print('beta', self.my_beta)
             print('bias', self.my_bias)
             print('RSD:', self.add_rsd)
             print('seed:', self.seed)
+            print('redshift:', self.z)
             
         if self.verbose: print('get power spectrum from CAMB')
-        self.kh_lin, self.z_lin, self.pk_lin = self.get_linear_matter_power_spectrum()
+        self.kh_lin, self.z_lin, self.pk_lin = self.get_linear_matter_power_spectrum(z=[self.z])
 
         self.plin = interp1d(self.kh_lin, self.pk_lin[0,:], fill_value="extrapolate")
         if self.verbose: print('define k grid')
@@ -93,13 +96,17 @@ class PowerSpectrumGenerator:
         k_eff, Pk, Pk2, Pk4, counts, totcounts = compute_Pk(self.N, self.amplitudes_squared, self.bins, self.k_bins, self.kfft)
         return k_eff, Pk, Pk2, Pk4, counts, totcounts
 
-    def set_cosmology(self, z=[2.4]):
+    def set_cosmology(self, z=None):
+        if z is None:
+            z = [self.z]
         self.pars.set_cosmology(H0=self.H0, ombh2=self.ombh2, omch2=self.omch2, mnu=self.mnu)
         self.pars.InitPower.set_params(ns=self.ns, As=self.As)
         self.pars.set_matter_power(redshifts=z, kmax=50)
         self.pars.NonLinear = model.NonLinear_none
 
-    def get_linear_matter_power_spectrum(self, z=[2.4]):
+    def get_linear_matter_power_spectrum(self, z=None):
+        if z is None:
+            z = [self.z]
         self.set_cosmology(z)
         results = camb.get_results(self.pars)
         kh_lin, z_lin, pk_lin = results.get_matter_power_spectrum(minkh=1e-4, 
