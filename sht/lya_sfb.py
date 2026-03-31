@@ -4,9 +4,13 @@ Spherical Fourier-Bessel estimator for the Lyman-α forest.
 Implements the C_ℓ(k) pseudo-power spectrum estimator:
   1. Line-of-sight Fourier transform (per sightline, complex)
   2. Angular SHT per k-bin (Re/Im split for real-valued DirectSHT)
-  3. Pseudo-C_ℓ(k) = (1/(2ℓ+1)) Σ_m |a_ℓm^f(k) - N·w_ℓm(k)|²
+  3. Pseudo-C_ℓ(k) = (1/(2ℓ+1)) Σ_m |a_ℓm^data(k)|²
 
-Depends on: sht.sht.DirectSHT, healpy
+For Ly-α, the data weights are w_j × δ_F, so pseudo-Cl = |a_lm(data)|²
+directly — no D−R subtraction needed.  The window alm (from randoms) is
+computed separately for use in MaskDeconvolution / mode coupling.
+
+Depends on: sht.sht.DirectSHT
 """
 
 import numpy as np
@@ -31,7 +35,8 @@ class LyaSFB:
     # ------------------------------------------------------------------ #
     #  Step 1: Line-of-sight Fourier transform                           #
     # ------------------------------------------------------------------ #
-    def compute_los_ft(self, chi_grid, delta_F, K_j=None, k_arr=None):
+    def compute_los_ft(self, chi_grid, delta_F, K_j=None, k_arr=None,
+                        apply_dchi=False):
         """
         Compute the LOS Fourier transform for all sightlines.
 
@@ -45,16 +50,19 @@ class LyaSFB:
         K_j : (Nsight, Npix) array or None
             Per-pixel weights.  None → uniform (K=1).
         k_arr : (Nk,) array or None
-            k-modes to evaluate.  None → FFT frequencies from chi_grid.
+            k-modes to evaluate.  None → FFT angular frequencies from chi_grid.
+        apply_dchi : bool
+            If True, multiply by dchi (continuous FT convention).
+            If False (default), unnormalized DFT.
 
         Returns
         -------
         k_arr : (Nk,) array
-            Wavenumber array (h/Mpc).
+            Wavenumber array (h/Mpc, angular frequency = 2π × cycles).
         delta_2d : (Nsight, Nk) complex array
-            Fourier-weighted flux: Σ_α K_j(χ_α) δ_F(χ_α) e^{ikχ_α} Δχ
+            Fourier-weighted flux: Σ_α K_j(χ_α) δ_F(χ_α) e^{ikχ_α} [× Δχ]
         K_tilde : (Nsight, Nk) complex array
-            Fourier-weighted window: Σ_α K_j(χ_α) e^{ikχ_α} Δχ
+            Fourier-weighted window: Σ_α K_j(χ_α) e^{ikχ_α} [× Δχ]
         """
         Nsight, Npix = delta_F.shape
         dchi = chi_grid[1] - chi_grid[0]
@@ -70,11 +78,11 @@ class LyaSFB:
 
         # Weighted fields: (Nsight, Npix)
         weighted_delta = K_j * delta_F  # K_j * delta_F
-        # weighted_rand  = K_j             # just K_j
 
         # Matrix multiply: (Nsight, Npix) @ (Npix, Nk) → (Nsight, Nk)
-        delta_2d = (weighted_delta @ phase.T) * dchi
-        K_tilde = (K_j @ phase.T) * dchi
+        norm = dchi if apply_dchi else 1.0
+        delta_2d = (weighted_delta @ phase.T) * norm
+        K_tilde = (K_j @ phase.T) * norm
 
         return k_arr, delta_2d, K_tilde
 
@@ -117,43 +125,45 @@ class LyaSFB:
     #  Step 3: Pseudo-C_ℓ(k)                                             #
     # ------------------------------------------------------------------ #
     @staticmethod
-    def pseudo_cl(alm_data, alm_rand, Nl, normalize=True):
+    def pseudo_cl(alm_data, Nl):
         """
-        Compute pseudo-C_ℓ(k) = (1/(2ℓ+1)) Σ_m |a_ℓm^f - N·w_ℓm|².
+        Compute pseudo-C_ℓ(k) = (1/(2ℓ+1)) Σ_m |a_ℓm^data(k)|².
+
+        For Ly-α forest the data weights are w_j × δ_F, so the
+        correlation function is <DD> = <(w δ_F)(w δ_F)> directly,
+        with no D−R subtraction needed.
 
         Parameters
         ----------
-        alm_data, alm_rand : complex arrays (Nlm,)
-            Healpix-convention alm from data and window SHTs.
+        alm_data : complex array (Nlm,)
+            Healpix-convention alm from data SHT.
         Nl : int
             Number of multipoles.
-        normalize : bool
-            If True, set N = a_{00}^f / w_{00} so monopoles match.
 
         Returns
         -------
         cl : (Nl,) array
             Pseudo-power spectrum at this k.
-        N_norm : complex
-            The normalization factor used.
         """
-        if normalize and np.abs(alm_rand[0]) > 0:
-            N_norm = alm_data[0] / alm_rand[0]
-        else:
-            N_norm = 0.0
-
-        alm_diff = alm_data - N_norm * alm_rand
-
-        # Compute Cl from the complex difference alm
-        # The alm are "double complex": each entry is complex (from Re+iIm SHT),
-        # and the Healpix convention stores m>=0 only.
-        cl = _alm2cl_complex(alm_diff, Nl)
-
-        return cl, N_norm
+        cl = _alm2cl_complex(alm_data, Nl)
+        return cl
 
     # ------------------------------------------------------------------ #
     #  Full pipeline: all k-bins                                         #
     # ------------------------------------------------------------------ #
+    @staticmethod
+    def compute_angular_window(sht_engine, theta, phi, Nsight, Nl):
+        """
+        Compute the angular window spectrum from uniform sightline weights.
+
+        W_l = (1/(2l+1)) Σ_m |u_lm|^2 where u_lm = SHT(ones).
+        Also returns the shot noise: sn = N_skew / (4π).
+        """
+        u_lm = sht_engine(theta, phi, np.ones(Nsight))
+        W_l = _alm2cl_complex(u_lm, Nl)
+        sn = Nsight / (4.0 * np.pi)
+        return W_l, sn, u_lm
+
     def compute_all_cl_k(self, theta, phi, chi_grid, delta_F, K_j=None,
                          k_arr=None, k_indices=None):
         """
@@ -196,8 +206,7 @@ class LyaSFB:
             alm_data_all.append(alm_data)
             alm_rand_all.append(alm_rand)
 
-            cl, _ = self.pseudo_cl(alm_data, alm_rand, self.Nl)
-            cl_k[i, :] = cl
+            cl_k[i, :] = self.pseudo_cl(alm_data, self.Nl)
 
             # Window spectrum from randoms
             wl_k[i, :] = _alm2cl_complex(alm_rand, self.Nl)
