@@ -1,8 +1,11 @@
 #!/usr/bin/env python
 """
-Money plots using cached 20-sim data + shot noise from subprocess.
-Uses the existing Cell_GRF...sims20.npz for cl_k and wl_k,
-computes shot noise per sim in a memory-efficient subprocess approach.
+Money plots using cached 20-sim data.
+Uses the existing Cell_GRF...sims20.npz for cl_k and wl_k.
+
+Note: No shot-noise subtraction. For Ly-alpha with fixed sightline positions,
+Sigma w_j^2 / (4 pi) is the j=k pair-counting diagonal -- cosmological signal,
+not Poisson noise. The MASTER framework already accounts for this.
 """
 import sys, os, gc, time, subprocess, json
 import numpy as np
@@ -156,9 +159,7 @@ cl_sub_mean = np.mean(cl_sub_stack, axis=0)
 cl_sub_std = np.std(cl_sub_stack, axis=0)
 sn_mean = np.mean(sn_stack)
 
-print(f"b1={b1_ref:.4f}, mean SN={sn_mean:.4e}")
-print(f"SN/cl at ell=5: {sn_mean/cl_mean[5]:.2%}, ell=100: {sn_mean/cl_mean[100]:.2%}, "
-      f"ell=400: {sn_mean/cl_mean[400]:.2%}")
+print(f"b1={b1_ref:.4f}")
 
 MD = MaskDeconvolution(Nl, wl_ref)
 bins = MD.binning_matrix('linear', 0, NperBin)
@@ -195,8 +196,8 @@ mean_sub = np.mean(ratios_sub[1:])
 mean_raw_low = np.mean([r for r, e in zip(ratios_raw[1:], binned_ells[1:]) if e < 288])
 mean_sub_low = np.mean([r for r, e in zip(ratios_sub[1:], binned_ells[1:]) if e < 288])
 
-print(f"\nMean ratio raw  (excl mono): all={mean_raw:.4f}, low-ell(<288)={mean_raw_low:.4f}")
-print(f"Mean ratio sub  (excl mono): all={mean_sub:.4f}, low-ell(<288)={mean_sub_low:.4f}")
+print(f"\nMean ratio (excl mono): all={mean_raw:.4f}, low-ell(<288)={mean_raw_low:.4f}")
+print(f"(SN-sub for reference only: all={mean_sub:.4f}, low-ell={mean_sub_low:.4f})")
 
 # ---- MaskDeconvolution approach ---- #
 print(f"\n--- MaskDeconvolution (deconvolved) ---")
@@ -218,8 +219,8 @@ for i in range(len(ells_dec)):
         print(f"{ells_dec[i]:6.0f} {theory_dec[i]:12.4e} {meas_raw_dec[i]:12.4e} "
               f"{meas_sub_dec[i]:12.4e} {r_raw:8.4f} {r_sub:8.4f}")
 
-print(f"\nMaskDeconv mean ratio raw: {np.mean(ratios_md_raw[1:]):.4f}")
-print(f"MaskDeconv mean ratio sub: {np.mean(ratios_md_sub[1:]):.4f}")
+print(f"\nMaskDeconv mean ratio: {np.mean(ratios_md_raw[1:]):.4f}")
+print(f"(SN-sub for reference: {np.mean(ratios_md_sub[1:]):.4f})")
 
 # ================================================================== #
 # PHASE 4: Plots                                                     #

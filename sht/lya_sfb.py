@@ -157,12 +157,16 @@ class LyaSFB:
         Compute the angular window spectrum from uniform sightline weights.
 
         W_l = (1/(2l+1)) Σ_m |u_lm|^2 where u_lm = SHT(ones).
-        Also returns the shot noise: sn = N_skew / (4π).
+
+        Note: Nsight/(4π) is NOT a separate shot-noise term to subtract.
+        For Ly-α with fixed sightline positions, the j=k diagonal of the
+        pair-counting sum is cosmological signal, not Poisson noise.
+        The MASTER framework <pseudo-Cl> = Mll @ C_true already includes
+        this contribution through the full window function W_l.
         """
         u_lm = sht_engine(theta, phi, np.ones(Nsight))
         W_l = _alm2cl_complex(u_lm, Nl)
-        sn = Nsight / (4.0 * np.pi)
-        return W_l, sn, u_lm
+        return W_l, u_lm
 
     def compute_all_cl_k(self, theta, phi, chi_grid, delta_F, K_j=None,
                          k_arr=None, k_indices=None):
