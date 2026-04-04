@@ -26,5 +26,11 @@ _sims_tmp.npz
 # Result directories (regenerable)
 results_*/
 
+# Archived old code
+old_code/
+
+# Internal docs (not for distribution)
+docs/
+
 # macOS
 .DS_Store
