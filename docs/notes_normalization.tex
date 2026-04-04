@@ -1,0 +1,407 @@
+\documentclass[11pt,a4paper]{article}
+\usepackage[margin=2.5cm]{geometry}
+\usepackage{amsmath,amssymb}
+\usepackage{bm}
+\usepackage{hyperref}
+\usepackage{xcolor}
+
+\newcommand{\chibar}{\bar{\chi}}
+\newcommand{\hchi}{\hat{\bm{n}}}
+\newcommand{\PF}{P_{\!F}}
+\newcommand{\Cl}{\hat{C}_\ell}
+\newcommand{\Mll}{M_{\ell L}}
+
+\title{Normalization of the Pseudo-$C_\ell(k)$ Estimator\\for the Ly-$\alpha$ Forest}
+\author{Working notes}
+\date{\today}
+
+\begin{document}
+\maketitle
+
+\tableofcontents
+
+%======================================================================
+\section{Setup and definitions}
+%======================================================================
+
+We have $N_s$ sightlines at angular positions
+$\hchi_j = (\theta_j, \phi_j)$, each sampled at $N$ uniformly-spaced
+comoving distances $\chi_\alpha = \chi_0 + \alpha\,\Delta\chi$ for
+$\alpha = 0,\dots,N{-}1$.  We define $\chibar \equiv (\chi_0 + \chi_{N-1})/2$.
+Each sightline carries a flux fluctuation field $\delta_F(\hchi_j, \chi_\alpha)$
+and a weight $K_j(\chi_\alpha) = 1$ (uniform weights for the periodic box).
+
+%======================================================================
+\section{Step 1: Line-of-sight DFT}
+\label{sec:dft}
+%======================================================================
+
+For each sightline $j$, we compute the unnormalized discrete Fourier transform
+\begin{equation}
+  w_j(k) \;=\; \sum_{\alpha=0}^{N-1}
+  K_j(\chi_\alpha)\,\delta_F(\hchi_j,\chi_\alpha)\;
+  e^{-2\pi i\, n\, \alpha / N}\,,
+  \label{eq:dft}
+\end{equation}
+where $k = 2\pi n/(N\Delta\chi)$ and $n = 0,\dots,N{-}1$.
+The DFT matrix used is $F_{\alpha n} = e^{-2\pi i\, n\,\alpha/N}$
+({\tt scipy.linalg.dft}).
+
+\paragraph{Key convention:} Only the \emph{real part} of the DFT output
+is kept: $w_j(k) \leftarrow \text{Re}[w_j(k)]$.  This is an inherited
+convention from the original code
+({\tt SHT\_lya.compute\_dft} returns {\tt np.real(FT\_delta)}).
+
+For the mask/window, the transform is
+\begin{equation}
+  \tilde{K}_j(k) = \text{Re}\!\left[
+  \sum_{\alpha=0}^{N-1} K_j(\chi_\alpha)\, e^{-2\pi i\,n\,\alpha/N}
+  \right]\,.
+\end{equation}
+For a periodic box with $K_j(\chi_\alpha) = 1$:
+\begin{equation}
+  \tilde{K}_j(k{=}0) = N, \qquad
+  \tilde{K}_j(k{\neq}0) = 0 \quad \text{(exact)}\,.
+  \label{eq:ft_mask_periodic}
+\end{equation}
+
+
+%======================================================================
+\section{Step 2: Spherical harmonic transform}
+%======================================================================
+
+At a given $k$-bin, we have real-valued weights $w_j(k)$ for each sightline.
+The DirectSHT engine computes
+\begin{equation}
+  a_{\ell m}(k) = \sum_{j=1}^{N_s} w_j(k)\, Y_{\ell m}(\theta_j, \phi_j)\,,
+  \label{eq:alm}
+\end{equation}
+where $Y_{\ell m}$ are the standard (complex) spherical harmonics.
+Only $m \ge 0$ modes are stored (HEALPix convention).
+
+For the window, an analogous SHT is performed with $w_j \to \tilde{K}_j(k)$.
+At $k{=}0$ and uniform weights, $\tilde{K}_j = N$ for all $j$, so
+\begin{equation}
+  u_{\ell m} = N \sum_{j=1}^{N_s} Y_{\ell m}(\theta_j, \phi_j)\,.
+\end{equation}
+
+
+%======================================================================
+\section{Step 3: Pseudo-$C_\ell(k)$}
+%======================================================================
+
+The measured pseudo-power spectrum is
+\begin{equation}
+  \boxed{
+  \Cl(k) = \frac{1}{2\ell+1}
+  \sum_{m=-\ell}^{\ell} \lvert a_{\ell m}(k) \rvert^2
+  }
+  \label{eq:pseudo_cl}
+\end{equation}
+computed via {\tt healpy.alm2cl} (with the factor-of-2 for $m>0$ since
+only $m\ge0$ is stored).
+
+For Ly-$\alpha$, because the data weights are $w_j = K_j \cdot \delta_F$
+(the field itself times a known weight), the pseudo-$C_\ell$ is simply
+$|a_{\ell m}^{\rm data}|^2$.
+There is \textbf{no $D{-}R$ subtraction} (unlike galaxy surveys where
+pseudo-$C_\ell = |a_{\ell m}^D - a_{\ell m}^R|^2$).
+
+
+%======================================================================
+\section{Theory prediction: pair-counting approach}
+\label{sec:pair}
+%======================================================================
+
+Expanding the square in Eq.~\eqref{eq:pseudo_cl} and using the addition
+theorem $\sum_m Y_{\ell m}(\hchi_j)\,Y_{\ell m}^*(\hchi_k) =
+(2\ell+1)/(4\pi)\,P_\ell(\cos\gamma_{jk})$, we obtain
+\begin{equation}
+  \Cl(k) = \frac{1}{4\pi}
+  \sum_{j,k=1}^{N_s} w_j(k)\,w_k(k)\,P_\ell(\cos\gamma_{jk})\,.
+  \label{eq:pair_sum}
+\end{equation}
+Taking the expectation value and using the Limber-like approximation
+for $k_\parallel = 0$:
+\begin{equation}
+  \langle w_j\, w_k \rangle
+  = N^2\,\PF\!\left(\frac{\ell}{\chibar},\,0\right)
+  \frac{1}{\chibar^2}\,,
+  \qquad (j \neq k)
+  \label{eq:ww_offdiag}
+\end{equation}
+where the factor $N^2$ arises because the DFT is unnormalized:
+each $w_j = \sum_\alpha \delta_F(\hchi_j,\chi_\alpha)$
+is a sum of $N$ values, and the two-point function picks up the
+number of pixel pairs contributing at a given $\ell/\chibar$.
+
+More precisely, $K_j K_k = N^2$ (since $\tilde{K}_j(0)=N$), so the
+angular window is
+\begin{equation}
+  \mathcal{P}_\lambda = \sum_{j,k=1}^{N_s} K_j K_k\,P_\lambda(\cos\gamma_{jk})
+  = N^2 \sum_{j,k=1}^{N_s} P_\lambda(\cos\gamma_{jk})\,.
+  \label{eq:PLKjKk}
+\end{equation}
+
+The pair-counting theory prediction is then
+\begin{equation}
+  \langle \Cl \rangle
+  = \frac{1}{4\pi\cdot 2\pi\,\chibar^2}
+  \sum_L \mathcal{M}_{\ell L}^{(p)}\, \mathcal{P}_L\,,
+  \label{eq:theory_pair}
+\end{equation}
+where $\mathcal{M}_{\ell L}^{(p)}$ is the Wigner~3$j$ coupling matrix
+with $\PF(L/\chibar,k)$ as input spectrum:
+\begin{equation}
+  \mathcal{M}_{\ell L}^{(p)} = (2L+1)
+  \sum_\lambda (2\lambda+1)\,\PF\!\left(\frac{\lambda}{\chibar}\right)
+  \begin{pmatrix} \ell & L & \lambda \\ 0 & 0 & 0 \end{pmatrix}^{\!2}\,.
+  \label{eq:M_pk}
+\end{equation}
+This is computed by \texttt{fast\_Wigner3j.CoupleMat(Nl, pk\_L)}.
+In the code, the plotted quantity is
+\begin{equation}
+  C_\ell^{\rm plot} = \frac{\mathcal{M}^{(p)} \cdot \mathcal{P}}
+  {4\pi\cdot 2\pi\,\chibar^2 \cdot (4\pi)^2}\,.
+  \label{eq:Cplot}
+\end{equation}
+The additional $(4\pi)^2$ factor in the denominator is a historical plotting
+convention that was present in the original code.  We verified numerically
+that Eq.~\eqref{eq:Cplot} matches $\langle${\tt hp.alm2cl(hdat)}$\rangle$
+to within Monte Carlo noise (ratio $\approx 0.96 \pm 0.04$ with 10---20 simulations).
+
+
+%======================================================================
+\section{Connecting to the MASTER framework}
+\label{sec:master}
+%======================================================================
+
+We now show that Eq.~\eqref{eq:Cplot} can be rewritten in the standard
+MASTER form $\langle\Cl\rangle = M_{\ell L}\,C_L^{\rm true}$.
+
+\subsection{Identity 1: pair-counting window = $4\pi \times$ SHT window}
+
+The angular window from SHT is
+\begin{equation}
+  W_\lambda = \frac{1}{2\lambda+1}
+  \sum_m |u_{\lambda m}|^2\,,
+  \qquad
+  u_{\lambda m} = N\sum_{j=1}^{N_s} Y_{\lambda m}(\hchi_j)\,.
+\end{equation}
+This is computed by {\tt healpy.alm2cl(hran)}.
+By the addition theorem:
+\begin{equation}
+  W_\lambda
+  = \frac{N^2}{2\lambda+1}\sum_m
+  \left|\sum_j Y_{\lambda m}(\hchi_j)\right|^2
+  = \frac{N^2}{4\pi}
+  \sum_{j,k} P_\lambda(\cos\gamma_{jk})\,.
+\end{equation}
+Comparing with Eq.~\eqref{eq:PLKjKk}:
+\begin{equation}
+  \boxed{
+    \mathcal{P}_\lambda = 4\pi\, W_\lambda
+  }
+  \label{eq:identity1}
+\end{equation}
+This identity was verified numerically to machine precision.
+
+\subsection{Identity 2: coupling with $P(k)$ vs.\ coupling with $W_\lambda$}
+
+The MASTER mode-coupling matrix uses the window spectrum as input:
+\begin{equation}
+  M_{\ell L} = \frac{2L+1}{4\pi}
+  \sum_\lambda (2\lambda+1)\, W_\lambda
+  \begin{pmatrix} \ell & L & \lambda \\ 0 & 0 & 0 \end{pmatrix}^{\!2}\,.
+  \label{eq:Mll}
+\end{equation}
+This is \texttt{MaskDeconvolution(Nl, wl\_ref).Mll}.
+
+The coupling matrix with $\PF$ as weight (Eq.~\ref{eq:M_pk}) satisfies a
+symmetry relation: because the Wigner~3$j$ symbol
+$\begin{psmallmatrix}\ell&L&\lambda\\0&0&0\end{psmallmatrix}^2$ is symmetric under
+permutation of $(\ell,L,\lambda)$, we have
+\begin{equation}
+  \boxed{
+    \mathcal{M}^{(p)}_{\ell L}\, W_L
+    = M_{\ell L}\, \PF\!\left(\tfrac{L}{\chibar}\right)
+  }
+  \label{eq:identity2}
+\end{equation}
+where $M_{\ell L}$ is the MASTER matrix with $W_\lambda$ as input.
+This was verified numerically.
+
+\subsection{Derivation of $C_\ell^{\rm true}$}
+
+Substituting Eqs.~\eqref{eq:identity1} and \eqref{eq:identity2} into
+Eq.~\eqref{eq:Cplot}:
+\begin{align}
+  C_\ell^{\rm plot}
+  &= \frac{1}{(4\pi)^2}
+    \frac{\mathcal{M}^{(p)} \cdot \mathcal{P}}
+         {4\pi\cdot 2\pi\,\chibar^2}
+  \nonumber\\
+  &= \frac{1}{(4\pi)^2}
+    \frac{1}{4\pi\cdot 2\pi\,\chibar^2}
+    \sum_L \mathcal{M}^{(p)}_{\ell L}\, (4\pi\, W_L)
+  \qquad\text{[using Eq.~\eqref{eq:identity1}]}
+  \nonumber\\
+  &= \frac{1}{(4\pi)^2}
+    \frac{1}{2\pi\,\chibar^2}
+    \sum_L \mathcal{M}^{(p)}_{\ell L}\, W_L
+  \nonumber\\
+  &= \frac{1}{(4\pi)^2}
+    \frac{1}{2\pi\,\chibar^2}
+    \sum_L M_{\ell L}\, \PF\!\left(\tfrac{L}{\chibar}\right)
+  \qquad\text{[using Eq.~\eqref{eq:identity2}]}
+  \nonumber\\
+  &= \sum_L M_{\ell L}\,
+    \underbrace{
+      \frac{\PF(L/\chibar)}{(4\pi)^2 \cdot 2\pi\,\chibar^2}
+    }_{C_L^{\rm true}}\,.
+\end{align}
+Therefore:
+\begin{equation}
+  \boxed{
+    C_\ell^{\rm true}
+    = \frac{\PF(\ell/\chibar,\,k_\parallel)}{32\pi^3\,\chibar^2}\,,
+    \qquad
+    32\pi^3 = \underbrace{2\pi}_{\text{LOS norm}}
+    \times\underbrace{4\pi}_{\text{addition thm}}
+    \times\underbrace{4\pi}_{\text{plot convention}}
+  }
+  \label{eq:Ctrue}
+\end{equation}
+and the MASTER relation is
+\begin{equation}
+  \langle \Cl \rangle = \sum_L M_{\ell L}\, C_L^{\rm true}\,.
+  \label{eq:master}
+\end{equation}
+Each factor of $4\pi$ and $2\pi$ has a clear origin:
+\begin{itemize}
+  \item $2\pi$: the Limber projection for the unnormalized radial DFT convention
+    (the pair-counting formula has $1/(2\pi\chibar^2)$ from the Fourier convention);
+  \item the first $4\pi$: the identity $\mathcal{P}_\lambda = 4\pi\, W_\lambda$
+    relating the pair counting angular window to the SHT window;
+  \item the second $4\pi$: the historical plotting convention
+    $C_\ell^{\rm plot} = C_\ell^{\rm pair} / (4\pi)^2$.
+\end{itemize}
+
+
+%======================================================================
+\section{Why shot-noise subtraction is wrong for Ly-$\alpha$}
+\label{sec:sn}
+%======================================================================
+
+\subsection{The diagonal contribution}
+
+The pair sum in Eq.~\eqref{eq:pair_sum} can be split into diagonal ($j{=}k$)
+and off-diagonal ($j{\neq}k$) terms:
+\begin{equation}
+  \Cl(k) = \underbrace{
+    \frac{1}{4\pi}\sum_{j=1}^{N_s} w_j^2
+  }_{\text{diagonal: ``shot noise''}}
+  +\;
+  \underbrace{
+    \frac{1}{4\pi}\sum_{j\neq k} w_j\,w_k\,P_\ell(\cos\gamma_{jk})
+  }_{\text{off-diagonal: correlations}}\,.
+  \label{eq:diagonal_split}
+\end{equation}
+The diagonal term is $\ell$-independent (since $P_\ell(1) = 1$) and equals
+\begin{equation}
+  N_\ell = \frac{1}{4\pi}\sum_{j=1}^{N_s} w_j^2(k)\,.
+  \label{eq:sn_def}
+\end{equation}
+
+\subsection{For galaxy surveys: subtraction is correct}
+
+In galaxy clustering, sightline (galaxy) \emph{positions} are Poisson-sampled
+from an underlying density field.  The diagonal $j{=}k$ term captures
+the self-pairing shot noise $\propto 1/\bar{n}$, which is independent of
+the power spectrum.  Subtracting it is correct and standard in the
+MASTER/pseudo-$C_\ell$ framework.
+
+\subsection{For Ly-$\alpha$: subtraction removes signal}
+
+For the Ly-$\alpha$ forest, sightline positions are \textbf{fixed} (determined
+by quasar positions, which are the same across realizations in simulations).
+The weights $w_j(k) = \sum_\alpha \delta_F(\hchi_j,\chi_\alpha)\,e^{-2\pi i n\alpha/N}$
+are Gaussian random variables whose variance depends on the cosmological
+power spectrum:
+\begin{equation}
+  \langle w_j^2 \rangle \propto \int \PF(k)\, dk\,.
+\end{equation}
+The diagonal term $\sum_j w_j^2/(4\pi)$ is therefore \textbf{cosmological
+signal}, not Poisson noise.
+
+Crucially, the MASTER expectation value
+$\langle\Cl\rangle = \sum_L M_{\ell L}\, C_L^{\rm true}$
+\emph{already includes} both diagonal and off-diagonal contributions.
+The mode-coupling matrix $M_{\ell L}$ is built from the window $W_\lambda$,
+which includes the $j{=}k$ pairs (the $P_\lambda(1) = 1$ diagonal).
+Subtracting $N_\ell$ after using $M_{\ell L}$ double-counts the removal.
+
+\subsection{Numerical verification}
+
+We ran \texttt{test\_fullsky\_v2.py} with all $N^2 = 64^2 = 4096$
+sightlines from an $N{=}64$ box at two distances:
+
+\begin{center}
+\begin{tabular}{lcccc}
+\hline
+$\chibar$ & Patch & Mean ratio (raw) & Mean ratio ($-$\,SN) \\
+\hline
+$5000$ & $14^\circ$ & $0.96 \pm 0.04$ & $0.44 \pm 0.08$ \\
+$800$ & $53^\circ$ & $0.47 \pm 0.01$ & $0.33 \pm 0.01$ \\
+\hline
+\end{tabular}
+\end{center}
+
+At $\chibar = 5000$ (where the Limber approximation is valid), the
+raw ratio is consistent with unity, confirming the $32\pi^3$ normalization.
+Shot-noise subtraction reduces the ratio to $\approx 0.44$, overcorrecting
+by ${\sim}\,50\%$.
+
+At $\chibar = 800$, the box subtends $53^\circ$ and the Limber approximation
+$k_\perp = \ell/\chibar$ breaks down (the box is too thick relative to
+$\chibar$), so neither ratio is expected to be unity.
+
+\subsection{Conclusion}
+For Ly-$\alpha$ with fixed sightline positions:
+\begin{equation}
+  \boxed{
+    \text{Do NOT subtract }\;
+    N_\ell = \frac{\sum_j w_j^2}{4\pi}\,.
+  }
+\end{equation}
+The MASTER formula $\langle\Cl\rangle = M_{\ell L}\,C_L^{\rm true}$ with
+$C_L^{\rm true} = \PF/(32\pi^3\chibar^2)$ accounts for the full signal
+including the diagonal ($j{=}k$) pairs.
+
+%======================================================================
+\section{Summary of the pipeline}
+%======================================================================
+
+\begin{enumerate}
+  \item Generate GRF box ($N=512$, $L=1380\;\text{Mpc}/h$, Planck~2018 at
+    $z=2.33$). Flux field: $\delta_F = b_1\,\delta_m$ (no RSD for
+    initial validation).
+  \item Extract $N_s \approx 10000$ sightlines at angular positions
+    $(\theta_j,\phi_j)$ with $\chibar \approx 5690\;\text{Mpc}/h$.
+  \item LOS DFT: $w_j = \text{Re}\left[\sum_\alpha \delta_F\,e^{-2\pi i n\alpha/N}\right]$.
+    Take $k{=}0$ mode.
+  \item DirectSHT: $a_{\ell m} = \sum_j w_j\,Y_{\ell m}(\theta_j,\phi_j)$.
+  \item Pseudo-$C_\ell$: $\Cl = (2\ell+1)^{-1} \sum_m |a_{\ell m}|^2$.
+    \textbf{No shot-noise subtraction.}
+  \item Theory: $C_\ell^{\rm true} = b_1^2\,P_{\rm lin}(\ell/\chibar) / (32\pi^3\chibar^2)$.
+  \item Mode coupling: $\langle\Cl\rangle = M_{\ell L}\,C_L^{\rm true}$
+    using \texttt{MaskDeconvolution}.
+  \item Deconvolution: $\hat{C}_b^{\rm dec} = (M_{bb}^{-1})_{bc}\,
+    \sum_L B_{c L}\,\Cl$ where $B$ is the binning matrix.
+\end{enumerate}
+
+Result: ratio $\langle\Cl\rangle_{\rm meas} / \langle\Cl\rangle_{\rm theory}
+\approx 0.96$--$1.04$ across all multipoles $\ell = 0$--$500$ with 20
+simulations and $\lambda_{\rm max} = 1000$.
+
+\end{document}

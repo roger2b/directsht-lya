@@ -104,39 +104,49 @@ class LyaSFB:
 
         Returns
         -------
-        alm_data : (Nlm,) complex array
-            a_ℓm^f(k) = a_ℓm^{Re} + i a_ℓm^{Im}
-        alm_rand : (Nlm,) complex array
-            w_ℓm(k) = w_ℓm^{Re} + i w_ℓm^{Im}
+        alm_data_re, alm_data_im : (Nlm,) complex arrays
+            SHT of real / imaginary parts of data weights.
+        alm_rand_re, alm_rand_im : (Nlm,) complex arrays
+            SHT of real / imaginary parts of window weights.
         """
         # Data SHT
-        alm_re = self.sht(theta, phi, np.real(delta_2d_k))
-        alm_im = self.sht(theta, phi, np.imag(delta_2d_k))
-        alm_data = alm_re + 1j * alm_im
+        alm_data_re = self.sht(theta, phi, np.real(delta_2d_k))
+        alm_data_im = self.sht(theta, phi, np.imag(delta_2d_k))
 
         # Window (randoms) SHT
-        wlm_re = self.sht(theta, phi, np.real(K_tilde_k))
-        wlm_im = self.sht(theta, phi, np.imag(K_tilde_k))
-        alm_rand = wlm_re + 1j * wlm_im
+        alm_rand_re = self.sht(theta, phi, np.real(K_tilde_k))
+        alm_rand_im = self.sht(theta, phi, np.imag(K_tilde_k))
 
-        return alm_data, alm_rand
+        return alm_data_re, alm_data_im, alm_rand_re, alm_rand_im
 
     # ------------------------------------------------------------------ #
     #  Step 3: Pseudo-C_ℓ(k)                                             #
     # ------------------------------------------------------------------ #
     @staticmethod
-    def pseudo_cl(alm_data, Nl):
+    def pseudo_cl(alm_re, alm_im, Nl):
         """
-        Compute pseudo-C_ℓ(k) = (1/(2ℓ+1)) Σ_m |a_ℓm^data(k)|².
+        Compute pseudo-C_ℓ(k) = (1/(2ℓ+1)) Σ_m |a_ℓm^data(k)|² for a
+        complex-weighted field.
 
-        For Ly-α forest the data weights are w_j × δ_F, so the
-        correlation function is <DD> = <(w δ_F)(w δ_F)> directly,
-        with no D−R subtraction needed.
+        For k≠0 the SHT weights are complex, so the alm splits into
+        a_ℓm = a_ℓm^Re + i a_ℓm^Im  (each itself complex in HEALPix
+        convention).  For real-valued SHTs, the HEALPix relation
+        a_{ℓ,-m} = (-1)^m a*_{ℓm} holds independently for the Re and Im
+        parts.  This means:
+            |a_{ℓm}|² + |a_{ℓ,-m}|² = 2(|a^Re_{ℓm}|² + |a^Im_{ℓm}|²)
+        i.e. the cross-terms cancel in the m + (-m) sum.  Therefore the
+        correct formula is C_ℓ = C_ℓ^{Re} + C_ℓ^{Im}, computed from
+        separate calls to _alm2cl_complex.
+
+        Using _alm2cl_complex on the combined (a^Re + i a^Im) would
+        introduce an erroneous cross-term -2 Im[a^Re (a^Im)*] per m>0.
 
         Parameters
         ----------
-        alm_data : complex array (Nlm,)
-            Healpix-convention alm from data SHT.
+        alm_re : complex array (Nlm,)
+            Healpix alm from SHT of Re[weights].
+        alm_im : complex array (Nlm,)
+            Healpix alm from SHT of Im[weights].
         Nl : int
             Number of multipoles.
 
@@ -145,7 +155,7 @@ class LyaSFB:
         cl : (Nl,) array
             Pseudo-power spectrum at this k.
         """
-        cl = _alm2cl_complex(alm_data, Nl)
+        cl = _alm2cl_complex(alm_re, Nl) + _alm2cl_complex(alm_im, Nl)
         return cl
 
     # ------------------------------------------------------------------ #
@@ -189,8 +199,6 @@ class LyaSFB:
             Pseudo-C_ℓ at each selected k.
         wl_k : (Nk_sel, Nl) array
             Window power spectrum at each selected k.
-        alm_data_all : list of (Nlm,) complex arrays
-        alm_rand_all : list of (Nlm,) complex arrays
         """
         k_arr, delta_2d, K_tilde = self.compute_los_ft(
             chi_grid, delta_F, K_j=K_j, k_arr=k_arr)
@@ -201,21 +209,16 @@ class LyaSFB:
 
         cl_k = np.zeros((len(k_indices), self.Nl))
         wl_k = np.zeros((len(k_indices), self.Nl))
-        alm_data_all = []
-        alm_rand_all = []
 
         for i, ki in enumerate(k_indices):
-            alm_data, alm_rand = self.sht_per_k(
+            alm_d_re, alm_d_im, alm_r_re, alm_r_im = self.sht_per_k(
                 theta, phi, delta_2d[:, ki], K_tilde[:, ki])
-            alm_data_all.append(alm_data)
-            alm_rand_all.append(alm_rand)
 
-            cl_k[i, :] = self.pseudo_cl(alm_data, self.Nl)
+            cl_k[i, :] = self.pseudo_cl(alm_d_re, alm_d_im, self.Nl)
+            wl_k[i, :] = _alm2cl_complex(alm_r_re, self.Nl) + \
+                         _alm2cl_complex(alm_r_im, self.Nl)
 
-            # Window spectrum from randoms
-            wl_k[i, :] = _alm2cl_complex(alm_rand, self.Nl)
-
-        return k_arr, cl_k, wl_k, alm_data_all, alm_rand_all
+        return k_arr, cl_k, wl_k
 
 
 def _alm2cl_complex(alm, Nl):

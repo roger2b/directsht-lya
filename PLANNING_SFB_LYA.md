@@ -6,7 +6,7 @@
 **Goal:** Compute $C_\ell(k)$ for the Ly-α forest flux fluctuations using the spherical Fourier-Bessel framework  
 **Repos:**
 - Galaxy code: https://github.com/martinjameswhite/directsht/tree/main
-- Ly-α fork: https://github.com/roger2b/directsht-lya/  
+- Ly-α fork: https://github.com/roger2b/directsht-lya/  (which is in the folder directsht-lya)
 **Key papers:**
 - Baleato Lizancos & White 2024 (arXiv:2312.12285) — galaxy harmonic analysis  
 - de Belsunce, Baleato Lizancos & White (attached PDF) — Ly-α sFB theory  

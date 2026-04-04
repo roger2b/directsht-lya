@@ -16,29 +16,15 @@ docs/_build/
 profile_default/
 ipython_config.py
 
-# folder with plots 
-notebooks/plots
+# Notebook caches
 notebooks/__pycache__
 
-# Temp test/debug files
-test_norm*.py
-test_bias*.py
-test_k0*.py
-test_match*.py
-test_final*.py
-test_shot*.py
-test_sn*.py
-test_window*.py
-test_pipeline.py
-make_final_plots.py
-extract_results.py
-_sn_cache.npy
+# Temporary files
 _sims_tmp.npz
 *.log
 
-# Executed notebook artifacts
-notebooks/master_periodic_executed.ipynb
-notebooks/plot_cell_*.png
+# Result directories (regenerable)
+results_*/
 
 # macOS
 .DS_Store
