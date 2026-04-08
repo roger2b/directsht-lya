@@ -75,45 +75,47 @@ for i in range(Nbins):
     hi = min(lo + NperBin, Nl)
     bins_mat[i, lo:hi] = 1.0 / (hi - lo)
 
-# ================================================================== #
-# PLOT 1: Multi-panel pseudo-Cl  (nrows x ncols subplots, one per k)
-# ================================================================== #
-ncols = min(3, Nk)
-nrows = (Nk + ncols - 1) // ncols
-
-fig, axes = plt.subplots(nrows, ncols, figsize=(6*ncols, 5*nrows),
-                         squeeze=False, sharex=True)
-fig.subplots_adjust(hspace=0.25, wspace=0.3)
-
+noise_str = f', $\\sigma_c={sigma_c:.2f}$' if sigma_c > 0 else ''
 colors = plt.cm.viridis(np.linspace(0.1, 0.9, Nk))
 
-for ik in range(Nk):
-    ir, ic = divmod(ik, ncols)
-    ax = axes[ir, ic]
+# ================================================================== #
+# PLOT 1: Pseudo-Cl — all k on one figure with ratio panel
+# ================================================================== #
+fig = plt.figure(figsize=(12, 9))
+gs = GridSpec(2, 1, height_ratios=[3, 1], hspace=0.05)
+ax1 = fig.add_subplot(gs[0])
+ax2 = fig.add_subplot(gs[1], sharex=ax1)
 
+for ik in range(Nk):
     binned_raw = bins_mat @ cl_mean_all[ik]
     binned_std = bins_mat @ (np.std(cl_k_all[:, ik, :], axis=0) / np.sqrt(Nsims))
     binned_theory = bins_mat @ theory_pseudo_all[ik]
 
-    ax.errorbar(binned_ells, binned_raw, yerr=binned_std,
-                fmt='o', color=colors[ik], ms=4, capsize=2,
-                label=f'Measured ({Nsims} sims)')
-    ax.plot(binned_ells, binned_theory, 'k--', lw=1.5, label='Theory')
+    offset = ik * 1.0
+    ax1.errorbar(binned_ells + offset, binned_raw, yerr=binned_std,
+                 fmt='o', color=colors[ik], ms=3, capsize=2,
+                 label=f'$k_\\parallel$={k_par[ik]:.3f}')
+    ax1.plot(binned_ells, binned_theory, '--', color=colors[ik], lw=1.5)
 
-    ax.set_title(f'$k_\\parallel = {k_par[ik]:.4f}$ h/Mpc', fontsize=14)
-    if ir == nrows - 1:
-        ax.set_xlabel(r'$\ell$')
-    ax.set_ylabel(r'pseudo-$C_\ell(k)$')
-    ax.legend(fontsize=10, loc='upper right')
+    # Ratio
+    mask = binned_theory > 0
+    ratio = np.where(mask, binned_raw / binned_theory, np.nan)
+    ratio_err = np.where(mask, binned_std / binned_theory, np.nan)
+    ax2.errorbar(binned_ells[mask] + offset, ratio[mask],
+                 yerr=ratio_err[mask],
+                 fmt='o', color=colors[ik], ms=3, capsize=1)
 
-# Hide empty subplots
-for ik in range(Nk, nrows * ncols):
-    ir, ic = divmod(ik, ncols)
-    axes[ir, ic].set_visible(False)
+ax1.set_ylabel(r'pseudo-$C_\ell(k)$')
+ax1.legend(fontsize=9, ncol=min(4, Nk), loc='upper right')
+ax1.set_title(f'Pseudo-$C_\\ell(k)$: {Nsims} sims, $N_\\ell$={Nl}, '
+              f'$N_{{\\rm skew}}$={Nskew}{noise_str}')
+ax1.tick_params(labelbottom=False)
 
-noise_str = f', $\\sigma_c={sigma_c:.2f}$' if sigma_c > 0 else ''
-fig.suptitle(f'Pseudo-$C_\\ell(k)$: {Nsims} sims, $N_\\ell$={Nl}, '
-             f'$N_{{\\rm skew}}$={Nskew}{noise_str}', fontsize=16, y=1.02)
+ax2.axhline(1, color='k', ls='--', lw=0.8)
+ax2.axhspan(0.99, 1.01, color='gray', alpha=0.15)
+ax2.set_xlabel(r'multipole $\ell$')
+ax2.set_ylabel('meas / theory')
+ax2.set_ylim(0.9, 1.1)
 
 outname = os.path.join(plotdir, "multik_pseudo_cl.pdf")
 plt.savefig(outname, bbox_inches='tight')
@@ -157,10 +159,10 @@ ax1.set_title(f'Multi-$k$ pseudo-$C_\\ell$: {Nsims} sims{noise_str}')
 ax1.tick_params(labelbottom=False)
 
 ax2.axhline(1, color='k', ls='--', lw=0.8)
-ax2.axhspan(0.95, 1.05, color='gray', alpha=0.15)
+ax2.axhspan(0.99, 1.01, color='gray', alpha=0.15)
 ax2.set_xlabel(r'multipole $\ell$')
 ax2.set_ylabel('meas / theory')
-ax2.set_ylim(0.7, 1.3)
+ax2.set_ylim(0.9, 1.1)
 
 outname = os.path.join(plotdir, "multik_ratio.pdf")
 plt.savefig(outname, bbox_inches='tight')
@@ -198,10 +200,10 @@ ax1.set_title(f'Floor-subtracted deconvolved $C_\\ell(k)$: '
 ax1.tick_params(labelbottom=False)
 
 ax2.axhline(1, color='k', ls='--', lw=0.8)
-ax2.axhspan(0.95, 1.05, color='gray', alpha=0.15)
+ax2.axhspan(0.99, 1.01, color='gray', alpha=0.15)
 ax2.set_xlabel(r'multipole $\ell$')
 ax2.set_ylabel('meas / theory')
-ax2.set_ylim(0.7, 1.3)
+ax2.set_ylim(0.9, 1.1)
 
 outname = os.path.join(plotdir, "multik_deconv.pdf")
 plt.savefig(outname, bbox_inches='tight')

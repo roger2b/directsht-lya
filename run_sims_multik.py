@@ -37,6 +37,8 @@ parser.add_argument("--outdir",     type=str,   default="results_multik", help="
 parser.add_argument("--add_rsd",    action="store_true",       help="Include RSD")
 parser.add_argument("--bias",       type=float, default=-0.1521, help="Ly-alpha bias b1")
 parser.add_argument("--beta",       type=float, default=0.2298, help="RSD beta (only if --add_rsd)")
+parser.add_argument("--radial",     action="store_true",
+                    help="Radial sightlines from observer at origin (non-parallel)")
 args = parser.parse_args()
 
 root = os.path.dirname(os.path.abspath(__file__))
@@ -57,8 +59,11 @@ print("Multi-k Ly-alpha pseudo-Cl simulation")
 print("=" * 72)
 print(f"  Lbox        = {args.Lbox:.1f} Mpc/h")
 print(f"  Ncell       = {args.Ncell}")
-print(f"  chi_shift   = {args.chi_shift:.1f} Mpc/h")
-print(f"  nqso        = {args.nqso:.1f} deg^-2  =>  Nskew ~ {num_qso_target}")
+if args.radial:
+    print(f"  radial      = True (observer at origin, box at chi(z=2.33))")
+else:
+    print(f"  chi_shift   = {args.chi_shift:.1f} Mpc/h")
+    print(f"  nqso        = {args.nqso:.1f} deg^-2  =>  Nskew ~ {num_qso_target}")
 print(f"  Nl          = {args.Nl}")
 print(f"  Nk          = {args.Nk} (k bins 0..{args.Nk-1})")
 print(f"  noise_frac  = {args.noise_frac}")
@@ -90,16 +95,34 @@ num_qso    = {num_qso_target}
 add_rsd    = {args.add_rsd}
 my_bias    = {args.bias}
 my_beta    = {args.beta}
+radial     = {args.radial}
+nqso       = {args.nqso}
 
 # Generate GRF
 GRF = my_GRF.PowerSpectrumGenerator(
     N={args.Ncell}, L={args.Lbox},
     add_rsd=add_rsd, my_bias=my_bias, my_beta=my_beta, seed=seed)
-all_x, all_y, all_z, all_w_rand, all_w_gal, Nskew = \\
-    GRF.process_skewers(Nskew=num_qso, shift=chi_shift)
 
-chi_grid = all_x[0, :]
-delta_F  = all_w_gal - 1.0   # delta_F = (rho/rho_bar) - 1
+if radial:
+    # Radial sightlines from observer at origin
+    chi_grid, delta_F, theta, phi, Nskew, chi_center = \\
+        GRF.process_skewers_radial(nqso=nqso)
+    # First-pixel Cartesian positions (for chi_eff computation in theory)
+    all_x0 = chi_grid[0] * np.sin(theta) * np.cos(phi)
+    all_y0 = chi_grid[0] * np.sin(theta) * np.sin(phi)
+    all_z0 = chi_grid[0] * np.cos(theta)
+    chi_shift_save = chi_center - {args.Lbox} / 2  # near-face distance
+else:
+    all_x, all_y, all_z, all_w_rand, all_w_gal, Nskew = \\
+        GRF.process_skewers(Nskew=num_qso, shift=chi_shift)
+    chi_grid = all_x[0, :]
+    delta_F  = all_w_gal - 1.0   # delta_F = (rho/rho_bar) - 1
+    theta, phi = GRF.compute_theta_phi_skewer_start(
+        all_x[:, 0], all_y[:, 0], all_z[:, 0])
+    all_x0 = all_x[:, 0]
+    all_y0 = all_y[:, 0]
+    all_z0 = all_z[:, 0]
+    chi_shift_save = chi_shift
 
 # ---- Add per-pixel Gaussian noise ----
 sigma_c = 0.0
@@ -108,9 +131,6 @@ if noise_frac > 0:
     rng = np.random.default_rng(seed + 999999)
     noise = rng.normal(0, sigma_c, size=delta_F.shape)
     delta_F = delta_F + noise
-
-theta, phi = GRF.compute_theta_phi_skewer_start(
-    all_x[:, 0], all_y[:, 0], all_z[:, 0])
 
 # Set up SHT engine and LyaSFB
 sht_engine = DirectSHT(Nl, 2*Nl, 0.75)
@@ -122,7 +142,7 @@ N_pix = len(chi_grid)
 k_indices = list(range(Nk))  # indices into fftfreq array
 
 # Compute C_ell(k) using explicit e^{{ikchi}} weighting
-k_arr, cl_k, wl_k = sfb.compute_all_cl_k(
+k_arr, cl_k, wl_k, _ = sfb.compute_all_cl_k(
     theta, phi, chi_grid, delta_F,
     K_j=None,    # uniform weights (K_j = 1)
     k_arr=None,  # use FFT grid
@@ -144,9 +164,10 @@ if compute_wl:
     out["wl_k"] = wl_k.tolist()  # (Nk, Nl)
     out["theta"] = theta.tolist()
     out["phi"]   = phi.tolist()
-    out["all_x0"] = all_x[:, 0].tolist()
-    out["all_y0"] = all_y[:, 0].tolist()
-    out["all_z0"] = all_z[:, 0].tolist()
+    out["all_x0"] = all_x0.tolist()
+    out["all_y0"] = all_y0.tolist()
+    out["all_z0"] = all_z0.tolist()
+    out["chi_shift"] = float(chi_shift_save)
 
 print("RESULT:" + json.dumps(out), flush=True)
 '''
@@ -172,7 +193,7 @@ for i in range(args.Nsims):
     result = subprocess.run(
         [sys.executable, worker_file, str(seed),
          str(compute_wl_flag), str(args.noise_frac)],
-        capture_output=True, text=True, timeout=1800
+        capture_output=True, text=True, timeout=36000
     )
 
     if result.returncode != 0:
@@ -202,6 +223,7 @@ for i in range(args.Nsims):
         meta["all_x0"] = np.array(out["all_x0"])
         meta["all_y0"] = np.array(out["all_y0"])
         meta["all_z0"] = np.array(out["all_z0"])
+        meta["chi_shift"] = out["chi_shift"]
 
     dt = time.time() - t0
     elapsed = time.time() - t_total
@@ -240,7 +262,8 @@ np.savez(outfile,
          all_x0    = meta["all_x0"],
          all_y0    = meta["all_y0"],
          all_z0    = meta["all_z0"],
-         chi_shift = args.chi_shift,
+         chi_shift = meta["chi_shift"],
+         radial    = args.radial,
          Lbox      = args.Lbox,
          Ncell     = args.Ncell,
          nqso      = args.nqso,
@@ -253,5 +276,5 @@ print(f"  cl_k shape: {cl_k_all.shape}")
 print(f"  k_par: {k_par[:5]} ... (Nk={len(k_par)})")
 print(f"  Nskew: {meta['Nskew']}, Nk_pix: {meta['Nk_pix']}")
 if args.noise_frac > 0:
-    N_noise = meta["Nk_pix"] * meta["sigma_c"]**2 * meta["Nskew"] / (4 * np.pi)
+    N_noise = meta["sigma_c"]**2 * meta["Nskew"] / (meta["Nk_pix"] * 4 * np.pi)
     print(f"  sigma_c: {meta['sigma_c']:.4f}, noise bias N_ell: {N_noise:.4e}")

@@ -117,12 +117,12 @@ dchi = chi_grid[1] - chi_grid[0]
 N_pix = len(chi_grid)
 
 # --- Standard: C_ell(k) ---
-k_arr, cl_k_std, wl_k = sfb.compute_all_cl_k(
+k_arr, cl_k_std, wl_k, _ = sfb.compute_all_cl_k(
     theta, phi, chi_grid, delta_F, K_j=None, k_arr=None,
     k_indices=k_indices)
 
 # --- Mean-subtracted: C_ell(k) ---
-_, cl_k_msub, _ = sfb.compute_all_cl_k(
+_, cl_k_msub, _, _ = sfb.compute_all_cl_k(
     theta, phi, chi_grid, delta_F_meansub, K_j=None, k_arr=None,
     k_indices=k_indices)
 

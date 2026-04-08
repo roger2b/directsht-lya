@@ -59,8 +59,8 @@ noise_frac = float(d['noise_frac']) if 'noise_frac' in d else 0.0
 
 Nsims, Nk, Nl = cl_k_all.shape
 
-# Noise bias: white in ell, independent of k
-N_noise = Nskew * sigma_c**2 * N / (4 * np.pi) if sigma_c > 0 else 0.0
+# Noise bias: white in ell, independent of k (K=1/L convention)
+N_noise = Nskew * sigma_c**2 / (N * 4 * np.pi) if sigma_c > 0 else 0.0
 
 # Sightline geometry
 all_x0 = d['all_x0']
@@ -68,6 +68,14 @@ all_y0 = d['all_y0']
 all_z0 = d['all_z0']
 r_j = np.sqrt(all_x0**2 + all_y0**2 + all_z0**2)
 chi_eff = np.mean(r_j)
+radial = bool(d['radial']) if 'radial' in d else False
+
+# For radial sightlines, chi_eff (first-pixel) is not the right scale.
+# Compute chi_min, chi_max for the Limber integral.
+if radial:
+    dchi_save = float(d['dchi'])
+    chi_min_radial = chi_eff   # first-pixel distance
+    chi_max_radial = chi_min_radial + L_box  # L_box = chi_max - chi_min
 
 print(f"Loaded {args.simfile}")
 print(f"  {Nsims} sims, Nk={Nk}, Nl={Nl}, Nskew={Nskew}, N={N}")
@@ -101,15 +109,46 @@ def compute_cl_true(ells, k_par_val, b1, beta, plin, chi_eff, L_box):
     kaiser = (1.0 + beta * mu2)**2
     return b1**2 * kaiser * plin(k_abs) / (L_box * chi_eff**2)
 
+def compute_cl_true_limber(ells, k_par_val, b1, beta, plin,
+                           chi_min, chi_max, Nint=200):
+    """Limber integral for radial sightlines spanning [chi_min, chi_max].
+
+    C_l(k) = (1/L^2) int_{chi_min}^{chi_max} dchi
+              b^2 (1+beta*mu(chi)^2)^2 P(|k(chi)|) / chi^2
+
+    where k_perp(chi) = (l+0.5)/chi varies along the LOS.
+    The 1/L^2 normalization ensures the formula reduces to
+    b^2 P / (L chi^2) in the thin-shell limit.
+    """
+    L_box = chi_max - chi_min
+    chi_arr = np.linspace(chi_min, chi_max, Nint)
+    dchi = chi_arr[1] - chi_arr[0]
+    cl = np.zeros(len(ells))
+    for chi in chi_arr:
+        k_perp = (ells + 0.5) / chi
+        k_abs = np.sqrt(k_perp**2 + k_par_val**2)
+        if k_par_val == 0:
+            mu2 = np.zeros_like(ells)
+        else:
+            mu2 = k_par_val**2 / (k_perp**2 + k_par_val**2)
+        kaiser = (1.0 + beta * mu2)**2
+        cl += b1**2 * kaiser * plin(k_abs) / chi**2 * dchi
+    return cl / L_box**2
+
 cl_true_all = np.zeros((Nk, Nl))
 for ik in range(Nk):
-    cl_true_all[ik] = compute_cl_true(ells, k_par[ik], b1, beta, plin,
-                                       chi_eff, L_box)
+    if radial:
+        cl_true_all[ik] = compute_cl_true_limber(
+            ells, k_par[ik], b1, beta, plin,
+            chi_min_radial, chi_max_radial)
+    else:
+        cl_true_all[ik] = compute_cl_true(ells, k_par[ik], b1, beta, plin,
+                                           chi_eff, L_box)
 
 # ================================================================== #
 # Angular window -- from MEASURED wl at k=0                           #
 # ================================================================== #
-W_floor = N**2 * Nskew / (4 * np.pi)
+W_floor = Nskew / (4 * np.pi)  # K=1/L convention: K̃(k=0)=1
 k_Nyq = np.pi * N / L_box
 
 wl_from_sim = wl_k[0, :]  # (Nl,)
@@ -120,10 +159,18 @@ print(f"  wl[0]={wl_from_sim[0]:.4e}, W_floor={W_floor:.4e}")
 # Floor-subtracted coupling matrix (angular, k-independent)          #
 # ================================================================== #
 def compute_floor_cl(k_par_val):
-    L_Nyq = k_Nyq * chi_eff
-    _L_floor = max(int(2 * L_Nyq), 8000)
+    if radial:
+        L_Nyq_max = chi_max_radial * np.sqrt(max(k_Nyq**2 - k_par_val**2, 0))
+    else:
+        L_Nyq_max = k_Nyq * chi_eff
+    _L_floor = max(int(2 * L_Nyq_max), 8000)
     _ells = np.arange(_L_floor, dtype=float)
-    _cl = compute_cl_true(_ells, k_par_val, b1, beta, plin, chi_eff, L_box)
+    if radial:
+        _cl = compute_cl_true_limber(_ells, k_par_val, b1, beta, plin,
+                                      chi_min_radial, chi_max_radial)
+    else:
+        _cl = compute_cl_true(_ells, k_par_val, b1, beta, plin, chi_eff, L_box)
+    # Nyquist mask (use chi_eff as representative distance)
     _k_perp = (_ells + 0.5) / chi_eff
     _k_abs = np.sqrt(_k_perp**2 + k_par_val**2)
     mask = _k_abs < k_Nyq
@@ -161,8 +208,13 @@ binned_ells = bins @ ells
 
 for ik in range(Nk):
     k_val = k_par[ik]
-    cl_true_ext = compute_cl_true(np.arange(Nl_large, dtype=float),
-                                   k_val, b1, beta, plin, chi_eff, L_box)
+    if radial:
+        cl_true_ext = compute_cl_true_limber(
+            np.arange(Nl_large, dtype=float), k_val, b1, beta, plin,
+            chi_min_radial, chi_max_radial)
+    else:
+        cl_true_ext = compute_cl_true(np.arange(Nl_large, dtype=float),
+                                       k_val, b1, beta, plin, chi_eff, L_box)
     floor_cl = compute_floor_cl(k_val)
     floor_cl_all[ik] = floor_cl
     theory_pseudo_all[ik] = (M_clust @ cl_true_ext)[:Nl] + floor_cl
