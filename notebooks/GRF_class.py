@@ -190,6 +190,81 @@ class PowerSpectrumGenerator:
         
         return all_x, all_y, all_z, all_w_rand, all_w_gal, Nskew
 
+    def process_skewers_radial(self, nqso=60.0):
+        """
+        Extract skewers along radial lines of sight from an observer at the
+        origin, with the box center at (0, 0, chi_center).
+
+        chi_center is the comoving distance at the box redshift, computed
+        from CAMB.  Each sightline has a fixed angular direction (theta, phi),
+        and all pixels at the same radial index lie on a spherical shell.
+
+        Parameters
+        ----------
+        nqso : float
+            QSO density in deg^-2 (determines number of sightlines).
+
+        Returns
+        -------
+        chi_grid : (N,) array    — radial distances (same for all sightlines)
+        delta_F  : (Nskew, N)    — density fluctuation (interpolated from GRF)
+        theta    : (Nskew,)      — polar angle of each sightline
+        phi      : (Nskew,)      — azimuthal angle
+        Nskew    : int           — number of sightlines
+        chi_center : float       — comoving distance to box center [Mpc/h]
+        """
+        from scipy.ndimage import map_coordinates
+
+        # Comoving distance at box redshift
+        self.set_cosmology(z=[self.z])
+        results = camb.get_results(self.pars)
+        chi_center = results.comoving_radial_distance(self.z) * self.h  # Mpc/h
+
+        # Number of sightlines from QSO density
+        patch_area_sr  = (self.L / chi_center)**2
+        patch_area_deg = patch_area_sr * (180.0 / np.pi)**2
+        Nskew = int(nqso * patch_area_deg)
+
+        # Radial grid (endpoint=False for clean DFT orthogonality)
+        chi_min = chi_center - self.L / 2
+        chi_grid = np.linspace(chi_min, chi_min + self.L, self.N, endpoint=False)
+
+        # Random angular directions within box footprint
+        np.random.seed(100)
+        x_t = np.random.uniform(-self.L / 2, self.L / 2, size=Nskew)
+        y_t = np.random.uniform(-self.L / 2, self.L / 2, size=Nskew)
+        theta = np.arctan2(np.sqrt(x_t**2 + y_t**2), chi_center)
+        phi   = np.arctan2(y_t, x_t)
+
+        # Direction vectors
+        sin_t = np.sin(theta)
+        cos_t = np.cos(theta)
+        cos_p = np.cos(phi)
+        sin_p = np.sin(phi)
+
+        # 3D positions: (Nskew, N) — one row per sightline
+        X = np.outer(sin_t * cos_p, chi_grid)
+        Y = np.outer(sin_t * sin_p, chi_grid)
+        Z = np.outer(cos_t, chi_grid)
+
+        # Map global coords → box grid indices (periodic)
+        # Box center at (0, 0, chi_center) → box coords [0, L)
+        # Axis 2 of self.dens is the RSD/LOS direction → maps to Z
+        i0 = (X + self.L / 2) * self.N / self.L   # transverse
+        i1 = (Y + self.L / 2) * self.N / self.L   # transverse
+        i2 = (Z - chi_center + self.L / 2) * self.N / self.L  # radial/LOS
+
+        # Interpolate density field (vectorised, periodic BCs, cubic)
+        all_coords = np.array([i0.ravel(), i1.ravel(), i2.ravel()])
+        delta_flat = map_coordinates(self.dens, all_coords,
+                                     order=3, mode='wrap')
+        delta_F = delta_flat.reshape(Nskew, self.N)
+
+        print(f"Radial skewers: chi_center={chi_center:.1f} Mpc/h, "
+              f"Nskew={Nskew}, theta_max={np.max(theta)*180/np.pi:.2f} deg")
+
+        return chi_grid, delta_F, theta, phi, Nskew, chi_center
+
     def compute_theta_phi_skewer_start(self, x,y,z):
         # only compute the Theta, Phi angle for the *first* pixel of the Lya skewer
 

@@ -35,10 +35,13 @@ class LyaSFB:
     # ------------------------------------------------------------------ #
     #  Step 1: Line-of-sight Fourier transform                           #
     # ------------------------------------------------------------------ #
-    def compute_los_ft(self, chi_grid, delta_F, K_j=None, k_arr=None,
-                        apply_dchi=False):
+    def compute_los_ft(self, chi_grid, delta_F, K_j=None, k_arr=None):
         """
         Compute the LOS Fourier transform for all sightlines.
+
+        Uses the K_j = 1/L normalization convention:
+            δ̃_j(k) = (Δχ/L) Σ_α K_j(χ_α) δ_F(χ_α) e^{ikχ_α}
+        so that K̃_j(k=0) = 1 for uniform weights.
 
         Parameters
         ----------
@@ -51,21 +54,19 @@ class LyaSFB:
             Per-pixel weights.  None → uniform (K=1).
         k_arr : (Nk,) array or None
             k-modes to evaluate.  None → FFT angular frequencies from chi_grid.
-        apply_dchi : bool
-            If True, multiply by dchi (continuous FT convention).
-            If False (default), unnormalized DFT.
 
         Returns
         -------
         k_arr : (Nk,) array
             Wavenumber array (h/Mpc, angular frequency = 2π × cycles).
         delta_2d : (Nsight, Nk) complex array
-            Fourier-weighted flux: Σ_α K_j(χ_α) δ_F(χ_α) e^{ikχ_α} [× Δχ]
+            Fourier-weighted flux: (Δχ/L) Σ_α K_j(χ_α) δ_F(χ_α) e^{ikχ_α}
         K_tilde : (Nsight, Nk) complex array
-            Fourier-weighted window: Σ_α K_j(χ_α) e^{ikχ_α} [× Δχ]
+            Fourier-weighted window: (Δχ/L) Σ_α K_j(χ_α) e^{ikχ_α}
         """
         Nsight, Npix = delta_F.shape
         dchi = chi_grid[1] - chi_grid[0]
+        L = Npix * dchi
 
         if k_arr is None:
             k_arr = 2.0 * np.pi * np.fft.fftfreq(Npix, d=dchi)
@@ -80,7 +81,7 @@ class LyaSFB:
         weighted_delta = K_j * delta_F  # K_j * delta_F
 
         # Matrix multiply: (Nsight, Npix) @ (Npix, Nk) → (Nsight, Nk)
-        norm = dchi if apply_dchi else 1.0
+        norm = dchi / L  # K_j = 1/L convention: K̃(k=0) = 1
         delta_2d = (weighted_delta @ phase.T) * norm
         K_tilde = (K_j @ phase.T) * norm
 
@@ -199,6 +200,8 @@ class LyaSFB:
             Pseudo-C_ℓ at each selected k.
         wl_k : (Nk_sel, Nl) array
             Window power spectrum at each selected k.
+        wfloor_k : (Nk_sel,) array
+            Window floor per k: (1/4π) Σ_j |K̃_j(k)|².
         """
         k_arr, delta_2d, K_tilde = self.compute_los_ft(
             chi_grid, delta_F, K_j=K_j, k_arr=k_arr)
@@ -209,6 +212,7 @@ class LyaSFB:
 
         cl_k = np.zeros((len(k_indices), self.Nl))
         wl_k = np.zeros((len(k_indices), self.Nl))
+        wfloor_k = np.zeros(len(k_indices))
 
         for i, ki in enumerate(k_indices):
             alm_d_re, alm_d_im, alm_r_re, alm_r_im = self.sht_per_k(
@@ -217,8 +221,9 @@ class LyaSFB:
             cl_k[i, :] = self.pseudo_cl(alm_d_re, alm_d_im, self.Nl)
             wl_k[i, :] = _alm2cl_complex(alm_r_re, self.Nl) + \
                          _alm2cl_complex(alm_r_im, self.Nl)
+            wfloor_k[i] = np.sum(np.abs(K_tilde[:, ki])**2) / (4.0 * np.pi)
 
-        return k_arr, cl_k, wl_k
+        return k_arr, cl_k, wl_k, wfloor_k
 
 
 def _alm2cl_complex(alm, Nl):
